@@ -3,6 +3,8 @@ import { Search, Loader } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Polyline } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+import airportTimezone from 'airport-timezone';
+const airportData = require('aircodes');
 
 // Fix for default markers
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -18,6 +20,15 @@ interface Waypoint {
   ident: string;
 }
 
+interface AirportTimezone {
+  code: string;
+  timezone: string;
+  offset: {
+    gmt: number;
+    dst: number;
+  };
+}
+
 interface FlightPlan {
   id: string;
   fromICAO: string;
@@ -27,7 +38,10 @@ interface FlightPlan {
   distance: number;
   route: {
     nodes: Waypoint[];
-  } 
+  };
+  departureTime?: string;
+  arrivalTime?: string;
+  duration?: string;
 }
 
 const App = () => {
@@ -36,6 +50,37 @@ const App = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [flightPlans, setFlightPlans] = useState<FlightPlan[]>([]);
+  const [departureTime, setDepartureTime] = useState('');
+  const [arrivalTime, setArrivalTime] = useState('');
+
+  const getAirportTimezone = (icao: string): AirportTimezone | null => {
+    const airport = airportTimezone.filter((airport: AirportTimezone) => 
+      airport.code === airportData.getAirportByIcao(icao).iata
+    )[0];
+    return airport || null;
+  };
+
+  const calculateDuration = (depTime: string, arrTime: string, depICAO: string, arrICAO: string): string => {
+    const depAirport = getAirportTimezone(depICAO);
+    const arrAirport = getAirportTimezone(arrICAO);
+
+    if (!depAirport || !arrAirport) {
+      return 'Unknown duration';
+    }
+
+    const depDate = new Date(depTime);
+    const arrDate = new Date(arrTime);
+
+    // Convert to UTC considering timezone offsets
+    const depUTC = new Date(depDate.getTime() - (depAirport.offset.dst * 3600000));
+    const arrUTC = new Date(arrDate.getTime() - (arrAirport.offset.dst * 3600000));
+
+    const durationMs = arrUTC.getTime() - depUTC.getTime();
+    const hours = Math.floor(durationMs / (1000 * 60 * 60));
+    const minutes = Math.round((durationMs % (1000 * 60 * 60)) / (1000 * 60));
+
+    return `${hours}h ${minutes}m`;
+  };
 
   const searchFlightPlans = async () => {
     if (!departure || !arrival) {
@@ -86,6 +131,14 @@ const App = () => {
       const planDetails: FlightPlan = await planResponse.json();
       // Ensure waypoints is always an array
       planDetails.route.nodes = planDetails.route.nodes || [];
+      if (departureTime && arrivalTime) {
+        planDetails.duration = calculateDuration(
+          departureTime,
+          arrivalTime,
+          planDetails.fromICAO,
+          planDetails.toICAO
+        );
+      }
       setFlightPlans([planDetails]);
     } catch (err) {
       setError('Error fetching flight plans: ' + (err instanceof Error ? err.message : 'Unknown error'));
@@ -110,31 +163,57 @@ const App = () => {
       <h1 className="text-3xl font-bold text-gray-800 mb-4">Flight Tools</h1>
       
       <div className="bg-white rounded-lg shadow p-4 max-w-6xl mx-auto">
-        <div className="flex flex-col md:flex-row gap-4 mb-4">
-          <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Departure (ICAO/Name)
-            </label>
-            <input
-              type="text"
-              value={departure}
-              onChange={(e) => setDeparture(e.target.value.toUpperCase())}
-              className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="EGLL"
-            />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Departure (ICAO/Name)
+              </label>
+              <input
+                type="text"
+                value={departure}
+                onChange={(e) => setDeparture(e.target.value.toUpperCase())}
+                className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="EGLL"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Departure Time
+              </label>
+              <input
+                type="datetime-local"
+                value={departureTime}
+                onChange={(e) => setDepartureTime(e.target.value)}
+                className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
           </div>
           
-          <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Arrival (ICAO/Name)
-            </label>
-            <input
-              type="text"
-              value={arrival}
-              onChange={(e) => setArrival(e.target.value.toUpperCase())}
-              className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="KJFK"
-            />
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Arrival (ICAO/Name)
+              </label>
+              <input
+                type="text"
+                value={arrival}
+                onChange={(e) => setArrival(e.target.value.toUpperCase())}
+                className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="KJFK"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Arrival Time
+              </label>
+              <input
+                type="datetime-local"
+                value={arrivalTime}
+                onChange={(e) => setArrivalTime(e.target.value)}
+                className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
           </div>
         </div>
 
@@ -184,6 +263,44 @@ const App = () => {
             {error && (
               <div className="p-3 bg-red-100 text-red-700 rounded mb-4">
                 {error}
+              </div>
+            )}
+            {flightPlans.length > 0 && (
+              <div>
+                <h2 className="text-xl font-semibold mb-3">Flight Plan Details</h2>
+                <div className="space-y-3">
+                  {flightPlans.map((plan) => (
+                    <div key={plan.id} className="bg-gray-50 p-3 rounded border">
+                      <div className="grid grid-cols-2 gap-4 mb-2">
+                        <div>
+                          <div className="font-medium">{plan.fromICAO} → {plan.toICAO}</div>
+                          <div className="text-sm text-gray-600">{plan.fromName} → {plan.toName}</div>
+                          {plan.duration && (
+                            <div className="text-sm font-medium text-blue-600">
+                              Duration: {plan.duration}
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <div className="font-medium">{Math.round(plan.distance)} nm</div>
+                          {departureTime && (
+                            <div className="text-sm text-gray-600">
+                              Departure: {new Date(departureTime).toLocaleString()} - 
+                              {getAirportTimezone(plan.fromICAO)?.timezone}
+                            </div>
+                          )}
+                          {arrivalTime && (
+                            <div className="text-sm text-gray-600">
+                              Arrival: {new Date(arrivalTime).toLocaleString()} - 
+                              {getAirportTimezone(plan.toICAO)?.timezone}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      {/* existing waypoints code */}
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
