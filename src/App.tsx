@@ -170,16 +170,9 @@ const App = () => {
               />
               {flightPlans.map((plan) => (
                 <React.Fragment key={plan.id}>
-                  {plan.route.nodes.map((waypoint, index) => (
-                    <Marker
-                      key={`${waypoint.ident}-${index}`}
-                      position={[waypoint.lat, waypoint.lon]}
-                      title={waypoint.ident}
-                    />
-                  ))}
                   <Polyline
                     positions={plan.route.nodes.map(w => [w.lat, w.lon])}
-                    color="blue"
+                    color="black"
                   />
                 </React.Fragment>
               ))}
@@ -191,45 +184,6 @@ const App = () => {
             {error && (
               <div className="p-3 bg-red-100 text-red-700 rounded mb-4">
                 {error}
-              </div>
-            )}
-
-            {flightPlans.length > 0 && (
-              <div>
-                <h2 className="text-xl font-semibold mb-3">Flight Plan Details</h2>
-                <div className="space-y-3">
-                  {flightPlans.map((plan) => (
-                    <div key={plan.id} className="bg-gray-50 p-3 rounded border">
-                      <div className="flex justify-between mb-2">
-                        <div>
-                          <span className="font-medium">{plan.fromICAO}</span> → 
-                          <span className="font-medium">{plan.toICAO}</span>
-                        </div>
-                        <div className="text-gray-600">
-                          {Math.round(plan.distance)} nm
-                        </div>
-                      </div>
-                      <div className="text-sm text-gray-600 mb-4">
-                        {plan.fromName} → {plan.toName}
-                      </div>
-                      
-                      <h3 className="font-medium mb-2">Waypoints:</h3>
-                      <div className="space-y-1 text-sm">
-                        {Array.isArray(plan.route.nodes) && plan.route.nodes.length > 0 ? (
-                          plan.route.nodes.map((waypoint, index) => (
-                            <div key={index} className="grid grid-cols-4 gap-2">
-                              <div>{waypoint.ident || 'Unknown'}</div>
-                              <div>{waypoint.lat.toFixed(4)}°</div>
-                              <div>{waypoint.lon.toFixed(4)}°</div>
-                            </div>
-                          ))
-                        ) : (
-                          <div className="text-gray-500">No waypoints available</div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
               </div>
             )}
           </div>
