@@ -51,6 +51,13 @@ interface RouteProgress {
   percentage: number;
 }
 
+interface CachedRoutePosition {
+  position: [number, number];
+  currentTime: Date;
+  percentage: number;
+  timeString: string;
+}
+
 const App = () => {
   const [departure, setDeparture] = useState('EGBB');
   const [arrival, setArrival] = useState('EDDF');
@@ -61,6 +68,7 @@ const App = () => {
   const [arrivalTime, setArrivalTime] = useState('2024-12-27T20:20');
   const [routeProgress, setRouteProgress] = useState<RouteProgress | null>(null);
   const [sliderValue, setSliderValue] = useState<number>(0);
+  const [cachedPositions, setCachedPositions] = useState<CachedRoutePosition[]>([]);
 
   const getAirportTimezone = (icao: string): AirportTimezone | null => {
     const airport = airportTimezone.filter((airport: AirportTimezone) => 
@@ -149,6 +157,7 @@ const App = () => {
         );
       }
       setFlightPlans([planDetails]);
+      calculateRoutePositions(planDetails, departureTime);
     } catch (err) {
       setError('Error fetching flight plans: ' + (err instanceof Error ? err.message : 'Unknown error'));
     } finally {
@@ -218,6 +227,44 @@ const App = () => {
     };
   }, []);
   
+  const calculateRoutePositions = useCallback((
+    plan: FlightPlan,
+    depTime: string
+  ) => {
+    if (!plan.duration || !plan.route.nodes.length) {
+      setCachedPositions([]);
+      return;
+    }
+  
+    const positions: CachedRoutePosition[] = [];
+    const INTERVAL = 15 * 60 * 1000; // 15 minutes in milliseconds
+    const [hours, minutes] = plan.duration.split('h ').map(part => 
+      parseInt(part.replace('m', ''))
+    );
+    
+    const totalDurationMs = (hours * 3600000) + (minutes * 60000) + (20 * 60 * 1000); // Including taxi time
+    const steps = Math.ceil(totalDurationMs / INTERVAL);
+  
+    for (let i = 0; i <= steps; i++) {
+      const percentage = (i * INTERVAL * 100) / totalDurationMs;
+      if (percentage > 100) break;
+  
+      const progress = calculateRoutePosition(
+        plan.route.nodes,
+        percentage,
+        depTime,
+        plan.duration
+      );
+  
+      positions.push({
+        ...progress,
+        timeString: progress.currentTime.toLocaleTimeString()
+      });
+    }
+  
+    setCachedPositions(positions);
+  }, [calculateRoutePosition]);
+  
   const handleSliderChange = useCallback((
     event: Event,
     value: number | number[],
@@ -227,15 +274,20 @@ const App = () => {
     
     const percentage = typeof value === 'number' ? value : value[0];
     setSliderValue(percentage);
-    
-    const progress = calculateRoutePosition(
-      plan.route.nodes,
-      percentage,
-      departureTime,
-      plan.duration
-    );
-    setRouteProgress(progress);
-  }, [departureTime, calculateRoutePosition]);
+  
+    // Find closest cached position
+    const position = cachedPositions.reduce((prev, curr) => {
+      return Math.abs(curr.percentage - percentage) < Math.abs(prev.percentage - percentage)
+        ? curr
+        : prev;
+    });
+  
+    setRouteProgress({
+      position: position.position,
+      currentTime: position.currentTime,
+      percentage
+    });
+  }, [departureTime, cachedPositions]);
 
   return (
     <div className="min-h-screen bg-gray-100 p-4">
@@ -413,14 +465,27 @@ const App = () => {
                 </span>
               )}
             </div>
-            <Slider
-              value={sliderValue}
-              onChange={(e, value) => handleSliderChange(e, value, plan)}
-              aria-labelledby="route-progress-slider"
-              valueLabelDisplay="auto"
-              valueLabelFormat={(value) => `${value}%`}
-              disabled={!departureTime || !plan.duration}
-            />
+            <div className="relative">
+              <Slider
+                value={sliderValue}
+                onChange={(e, value) => handleSliderChange(e, value, plan)}
+                aria-labelledby="route-progress-slider"
+                valueLabelDisplay="auto"
+                valueLabelFormat={(value) => `${value}%`}
+                disabled={!departureTime || !plan.duration}
+              />
+              <div className="flex justify-between mt-1 text-xs text-gray-500">
+                {cachedPositions.map((pos, idx) => (
+                  <div key={idx} style={{
+                    position: 'absolute',
+                    left: `${pos.percentage}%`,
+                    transform: 'translateX(-50%)'
+                  }}>
+                    |
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         ))}
       </div>
