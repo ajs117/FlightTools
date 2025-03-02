@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Search, Loader } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Polyline } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import airportTimezone from 'airport-timezone';
+import { Slider } from '@mui/material';
 const airportData = require('aircodes');
 
 // Fix for default markers
@@ -44,14 +45,22 @@ interface FlightPlan {
   duration?: string;
 }
 
+interface RouteProgress {
+  position: [number, number];
+  currentTime: Date;
+  percentage: number;
+}
+
 const App = () => {
-  const [departure, setDeparture] = useState('');
-  const [arrival, setArrival] = useState('');
+  const [departure, setDeparture] = useState('EGBB');
+  const [arrival, setArrival] = useState('EDDF');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [flightPlans, setFlightPlans] = useState<FlightPlan[]>([]);
-  const [departureTime, setDepartureTime] = useState('');
-  const [arrivalTime, setArrivalTime] = useState('');
+  const [departureTime, setDepartureTime] = useState('2024-12-27T17:45');
+  const [arrivalTime, setArrivalTime] = useState('2024-12-27T20:20');
+  const [routeProgress, setRouteProgress] = useState<RouteProgress | null>(null);
+  const [sliderValue, setSliderValue] = useState<number>(0);
 
   const getAirportTimezone = (icao: string): AirportTimezone | null => {
     const airport = airportTimezone.filter((airport: AirportTimezone) => 
@@ -158,6 +167,76 @@ const App = () => {
     ];
   };
 
+  const calculateRoutePosition = useCallback((
+    waypoints: Waypoint[],
+    percentage: number,
+    depTime: string,
+    duration: string
+  ): RouteProgress => {
+    if (waypoints.length < 2) return {
+      position: [0, 0],
+      currentTime: new Date(depTime),
+      percentage: 0
+    };
+  
+    // Add 10 minutes for taxi at each end
+    const taxiTime = 10 * 60 * 1000; // 10 minutes in milliseconds
+    const [hours, minutes] = duration.split('h ').map(part => 
+      parseInt(part.replace('m', ''))
+    );
+    const totalDurationMs = (hours * 3600000) + (minutes * 60000) + (taxiTime * 2);
+    
+    // Calculate current time based on percentage
+    const startTime = new Date(depTime);
+    const elapsedMs = (totalDurationMs * percentage) / 100;
+    const currentTime = new Date(startTime.getTime() + elapsedMs);
+  
+    // Calculate position along route
+    const totalSegments = waypoints.length - 1;
+    const segmentPercentage = (percentage * totalSegments) / 100;
+    const currentSegment = Math.floor(segmentPercentage);
+    const segmentProgress = segmentPercentage - currentSegment;
+  
+    if (currentSegment >= totalSegments) {
+      return {
+        position: [waypoints[totalSegments].lat, waypoints[totalSegments].lon],
+        currentTime,
+        percentage
+      };
+    }
+  
+    const start = waypoints[currentSegment];
+    const end = waypoints[currentSegment + 1];
+    
+    const lat = start.lat + (end.lat - start.lat) * segmentProgress;
+    const lon = start.lon + (end.lon - start.lon) * segmentProgress;
+  
+    return {
+      position: [lat, lon],
+      currentTime,
+      percentage
+    };
+  }, []);
+  
+  const handleSliderChange = useCallback((
+    event: Event,
+    value: number | number[],
+    plan: FlightPlan
+  ) => {
+    if (!departureTime || !plan.duration) return;
+    
+    const percentage = typeof value === 'number' ? value : value[0];
+    setSliderValue(percentage);
+    
+    const progress = calculateRoutePosition(
+      plan.route.nodes,
+      percentage,
+      departureTime,
+      plan.duration
+    );
+    setRouteProgress(progress);
+  }, [departureTime, calculateRoutePosition]);
+
   return (
     <div className="min-h-screen bg-gray-100 p-4">
       <h1 className="text-3xl font-bold text-gray-800 mb-4">Flight Tools</h1>
@@ -253,6 +332,15 @@ const App = () => {
                     positions={plan.route.nodes.map(w => [w.lat, w.lon])}
                     color="black"
                   />
+                  {routeProgress && (
+                    <Marker
+                      position={routeProgress.position}
+                      icon={L.divIcon({
+                        className: 'bg-blue-500 w-4 h-4 rounded-full border-2 border-white',
+                        iconSize: [16, 16]
+                      })}
+                    />
+                  )}
                 </React.Fragment>
               ))}
             </MapContainer>
@@ -297,7 +385,17 @@ const App = () => {
                           )}
                         </div>
                       </div>
-                      {/* existing waypoints code */}
+                      <Slider
+                        value={sliderValue}
+                        onChange={(e, value) => handleSliderChange(e, value, plan)}
+                        aria-labelledby="route-progress-slider"
+                      />
+                      {routeProgress && (
+                        <div className="text-sm text-gray-600">
+                          Current Position: {routeProgress.position[0].toFixed(2)}, {routeProgress.position[1].toFixed(2)}<br />
+                          Current Time: {routeProgress.currentTime.toLocaleString()}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -305,6 +403,26 @@ const App = () => {
             )}
           </div>
         </div>
+        {flightPlans.map((plan) => (
+          <div key={plan.id} className="mt-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm text-gray-600">Route Progress</span>
+              {routeProgress && (
+                <span className="text-sm font-medium">
+                  {routeProgress.currentTime.toLocaleTimeString()}
+                </span>
+              )}
+            </div>
+            <Slider
+              value={sliderValue}
+              onChange={(e, value) => handleSliderChange(e, value, plan)}
+              aria-labelledby="route-progress-slider"
+              valueLabelDisplay="auto"
+              valueLabelFormat={(value) => `${value}%`}
+              disabled={!departureTime || !plan.duration}
+            />
+          </div>
+        ))}
       </div>
     </div>
   );
