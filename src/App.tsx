@@ -1,10 +1,12 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Search, Loader } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Polyline, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import airportTimezone from 'airport-timezone';
 import { Slider } from '@mui/material';
+// @ts-ignore
+import terminator from "@joergdietrich/leaflet.terminator";
 const airportData = require('aircodes');
 
 // Fix for default markers
@@ -102,6 +104,33 @@ const findClosestPosition = (positions: CachedRoutePosition[], target: number): 
     ? (Math.abs(positions[low].percentage - target) < Math.abs(positions[high].percentage - target) 
        ? positions[low] : positions[high])
     : null;
+};
+
+interface DayNightTerminatorProps {
+  currentTime?: Date;
+}
+
+const DayNightTerminator = ({ currentTime }: DayNightTerminatorProps) => {
+  const map = useMap();
+  const terminatorRef = useRef<any>(null);
+  
+  useEffect(() => {
+    terminatorRef.current = terminator().addTo(map);
+
+    return () => {
+      if (terminatorRef.current) {
+        map.removeLayer(terminatorRef.current);
+      }
+    };
+  }, [map]);
+
+  useEffect(() => {
+    if (terminatorRef.current && currentTime) {
+      terminatorRef.current.setTime(currentTime);
+    }
+  }, [currentTime]);
+
+  return null;
 };
 
 const App = () => {
@@ -454,6 +483,7 @@ const App = () => {
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
+              <DayNightTerminator currentTime={routeProgress?.currentTime} />
               {flightPlans.map((plan) => (
                 <React.Fragment key={plan.id}>
                   <Polyline
