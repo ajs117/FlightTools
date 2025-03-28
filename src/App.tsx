@@ -591,11 +591,17 @@ const App = () => {
                           </div>
                         </div>
                         {routeProgress && (
-                          <div className="text-sm text-gray-600 mt-10">
+                            <div className="text-sm text-gray-600 mt-10">
                             Current Position: {routeProgress.position[0].toFixed(2)}, {routeProgress.position[1].toFixed(2)}
                             <br />
-                            Current Time: {routeProgress.currentTime.toLocaleString()}
-                          </div>
+                            Current Time (UTC): {(() => {
+                              const depAirport = getAirportTimezone(flightPlans[0]?.fromICAO || '');
+                              if (!depAirport) return routeProgress.currentTime.toLocaleString();
+                              const utcTime = new Date(routeProgress.currentTime.getTime() - 
+                              ((depAirport.offset.gmt + depAirport.offset.dst) * 3600000));
+                              return utcTime.toLocaleString() + ' UTC';
+                            })()}
+                            </div>
                         )}
                       </div>
                     </div>
