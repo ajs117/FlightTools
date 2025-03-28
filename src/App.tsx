@@ -7,6 +7,7 @@ import airportTimezone from 'airport-timezone';
 import { Slider } from '@mui/material';
 // @ts-ignore
 import terminator from "@joergdietrich/leaflet.terminator";
+import planeIcon from './plane-icon.svg';
 const airportData = require('aircodes');
 
 // Fix for default markers
@@ -131,6 +132,25 @@ const DayNightTerminator = ({ currentTime }: DayNightTerminatorProps) => {
   }, [currentTime]);
 
   return null;
+};
+
+const calculateBearing = (start: [number, number], end: [number, number]): number => {
+  const startLat = start[0] * Math.PI / 180;
+  const startLng = start[1] * Math.PI / 180;
+  const endLat = end[0] * Math.PI / 180;
+  const endLng = end[1] * Math.PI / 180;
+
+  const dLng = endLng - startLng;
+
+  const y = Math.sin(dLng) * Math.cos(endLat);
+  const x = Math.cos(startLat) * Math.sin(endLat) -
+            Math.sin(startLat) * Math.cos(endLat) * Math.cos(dLng);
+
+  let bearing = Math.atan2(y, x) * 180 / Math.PI;
+  if (bearing < 0) {
+    bearing += 360;
+  }
+  return bearing;
 };
 
 const App = () => {
@@ -494,8 +514,18 @@ const App = () => {
                     <Marker
                       position={routeProgress.position}
                       icon={L.divIcon({
-                        className: 'bg-blue-500 w-4 h-4 rounded-full border-2 border-white',
-                        iconSize: [16, 16]
+                        html: `<div style="transform: rotate(${(() => {
+                          const currentIdx = Math.floor((routeProgress.percentage * (plan.route.nodes.length - 1)) / 100);
+                          const nextIdx = Math.min(currentIdx + 1, plan.route.nodes.length - 1);
+                          const start: [number, number] = [plan.route.nodes[currentIdx].lat, plan.route.nodes[currentIdx].lon];
+                          const end: [number, number] = [plan.route.nodes[nextIdx].lat, plan.route.nodes[nextIdx].lon];
+                          return calculateBearing(start, end);
+                        })()}deg)">
+                          <img src="${planeIcon}" alt="plane" style="width: 24px; height: 24px;" />
+                        </div>`,
+                        className: '',
+                        iconSize: [24, 24],
+                        iconAnchor: [12, 12]
                       })}
                     />
                   )}
