@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import FlightCalculator from './components/FlightCalculator';
-import { FlightTracker } from './components/SimpleMap';
+import { FlightTracker } from './components/FlightTracker';
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<'calculator' | 'tracker'>('tracker');
