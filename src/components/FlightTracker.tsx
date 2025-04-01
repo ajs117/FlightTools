@@ -61,6 +61,53 @@ const kmhToKnots = (kmh: number): number => {
   return Math.round(kmh * 0.539957);
 };
 
+// Calculate interpolated position based on speed and heading
+const calculateInterpolatedPosition = (startPos: InterpolatedPosition, speed: number, heading: number): InterpolatedPosition => {
+  const now = Date.now();
+  const timeDiff = (now - startPos.timestamp) / 1000; // Convert to seconds
+  const distance = (speed * timeDiff) / 3600; // Convert km/h to km
+
+  // Convert heading to radians
+  const headingRad = (heading * Math.PI) / 180;
+  
+  // Calculate new position using great circle formula
+  const lat1 = startPos.lat * Math.PI / 180;
+  const lon1 = startPos.lng * Math.PI / 180;
+  const d = distance / 6371; // Earth's radius in km
+
+  const lat2 = Math.asin(
+    Math.sin(lat1) * Math.cos(d) +
+    Math.cos(lat1) * Math.sin(d) * Math.cos(headingRad)
+  );
+
+  const lon2 = lon1 + Math.atan2(
+    Math.sin(headingRad) * Math.sin(d) * Math.cos(lat1),
+    Math.cos(d) - Math.sin(lat1) * Math.sin(lat2)
+  );
+
+  return {
+    lat: lat2 * 180 / Math.PI,
+    lng: lon2 * 180 / Math.PI,
+    timestamp: now
+  };
+};
+
+// Calculate distance between two points using Haversine formula
+const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+  const R = 6371e3; // Earth's radius in meters
+  const φ1 = lat1 * Math.PI / 180;
+  const φ2 = lat2 * Math.PI / 180;
+  const Δφ = (lat2 - lat1) * Math.PI / 180;
+  const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) *
+    Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return Math.round(R * c); // Distance in meters
+};
+
 // Component to handle map updates
 const MapUpdater = ({ center }: { center: [number, number] }) => {
   const map = useMap();
@@ -78,6 +125,8 @@ export const FlightTracker: React.FC = () => {
     return savedLocation ? JSON.parse(savedLocation) : null;
   });
   const [aircraftPosition, setAircraftPosition] = useState<Location | null>(null);
+  const [distance, setDistance] = useState<number | null>(null);
+  const [displayedDistance, setDisplayedDistance] = useState<number | null>(null);
   const [error, setError] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
@@ -102,6 +151,8 @@ export const FlightTracker: React.FC = () => {
   });
   const [trackingInterval, setTrackingInterval] = useState<NodeJS.Timeout | null>(null);
   const [interpolationInterval, setInterpolationInterval] = useState<NodeJS.Timeout | null>(null);
+  const [distanceUpdateInterval, setDistanceUpdateInterval] = useState<NodeJS.Timeout | null>(null);
+  const [distanceInterpolationInterval, setDistanceInterpolationInterval] = useState<NodeJS.Timeout | null>(null);
   const [lastDrawTime, setLastDrawTime] = useState<Date | null>(() => {
     const cachedTime = localStorage.getItem('cachedLastDrawTime');
     return cachedTime ? new Date(JSON.parse(cachedTime)) : null;
@@ -180,8 +231,103 @@ export const FlightTracker: React.FC = () => {
       if (interpolationInterval) {
         clearInterval(interpolationInterval);
       }
+      if (distanceUpdateInterval) {
+        clearInterval(distanceUpdateInterval);
+      }
+      if (distanceInterpolationInterval) {
+        clearInterval(distanceInterpolationInterval);
+      }
     };
-  }, [trackingInterval, interpolationInterval]);
+  }, [trackingInterval, interpolationInterval, distanceUpdateInterval, distanceInterpolationInterval]);
+
+  // Update distance when location or aircraft position changes
+  useEffect(() => {
+    if (location && aircraftPosition) {
+      const newDistance = calculateDistance(
+        location.lat,
+        location.lng,
+        aircraftPosition.lat,
+        aircraftPosition.lng
+      );
+      setDistance(newDistance);
+      setDisplayedDistance(newDistance); // Set initial value immediately
+
+      // Clear existing intervals
+      if (distanceUpdateInterval) {
+        clearInterval(distanceUpdateInterval);
+      }
+      if (distanceInterpolationInterval) {
+        clearInterval(distanceInterpolationInterval);
+      }
+
+      // Set up new interval for distance updates
+      const interval = setInterval(() => {
+        if (location && aircraftPosition) {
+          const currentDistance = calculateDistance(
+            location.lat,
+            location.lng,
+            aircraftPosition.lat,
+            aircraftPosition.lng
+          );
+          setDistance(currentDistance);
+        }
+      }, 25); // Update every 100ms for smooth display
+
+      setDistanceUpdateInterval(interval);
+
+      // Set up separate interval for position interpolation for distance calculation
+      if (flightData?.live && lastKnownPosition) {
+        const distanceInterpolation = setInterval(() => {
+          if (flightData.live && lastKnownPosition && !flightData.live.is_ground && flightData.live.speed_horizontal >= 50) {
+            const newPos = calculateInterpolatedPosition(
+              lastKnownPosition,
+              flightData.live.speed_horizontal,
+              flightData.live.direction
+            );
+            setAircraftPosition({
+              lat: newPos.lat,
+              lng: newPos.lng,
+              name: `${flightData.airline.name} ${flightData.flight.number}`
+            });
+          }
+        }, 100); // Update every 100ms for smooth distance calculation
+
+        setDistanceInterpolationInterval(distanceInterpolation);
+      }
+    } else {
+      setDistance(null);
+      setDisplayedDistance(null);
+      if (distanceUpdateInterval) {
+        clearInterval(distanceUpdateInterval);
+        setDistanceUpdateInterval(null);
+      }
+      if (distanceInterpolationInterval) {
+        clearInterval(distanceInterpolationInterval);
+        setDistanceInterpolationInterval(null);
+      }
+    }
+  }, [location, aircraftPosition, flightData, lastKnownPosition, calculateInterpolatedPosition]);
+
+  // Animate distance display
+  useEffect(() => {
+    if (distance === null || displayedDistance === null) {
+      setDisplayedDistance(distance);
+      return;
+    }
+
+    const diff = distance - displayedDistance;
+    if (Math.abs(diff) < 1) {
+      setDisplayedDistance(distance);
+      return;
+    }
+
+    const step = Math.sign(diff) * Math.min(Math.abs(diff), Math.max(1, Math.abs(diff) / 5));
+    const timer = setTimeout(() => {
+      setDisplayedDistance(prev => prev !== null ? prev + step : null);
+    }, 16); // ~60fps
+
+    return () => clearTimeout(timer);
+  }, [distance, displayedDistance]);
 
   // Get current location
   const getCurrentLocation = () => {
@@ -247,38 +393,7 @@ export const FlightTracker: React.FC = () => {
     }
   };
 
-  // Calculate interpolated position based on speed and heading
-  const calculateInterpolatedPosition = useCallback((startPos: InterpolatedPosition, speed: number, heading: number): InterpolatedPosition => {
-    const now = Date.now();
-    const timeDiff = (now - startPos.timestamp) / 1000; // Convert to seconds
-    const distance = (speed * timeDiff) / 3600; // Convert km/h to km
-
-    // Convert heading to radians
-    const headingRad = (heading * Math.PI) / 180;
-    
-    // Calculate new position using great circle formula
-    const lat1 = startPos.lat * Math.PI / 180;
-    const lon1 = startPos.lng * Math.PI / 180;
-    const d = distance / 6371; // Earth's radius in km
-
-    const lat2 = Math.asin(
-      Math.sin(lat1) * Math.cos(d) +
-      Math.cos(lat1) * Math.sin(d) * Math.cos(headingRad)
-    );
-
-    const lon2 = lon1 + Math.atan2(
-      Math.sin(headingRad) * Math.sin(d) * Math.cos(lat1),
-      Math.cos(d) - Math.sin(lat1) * Math.sin(lat2)
-    );
-
-    return {
-      lat: lat2 * 180 / Math.PI,
-      lng: lon2 * 180 / Math.PI,
-      timestamp: now
-    };
-  }, []);
-
-  // Update interpolated position
+  // Update interpolated position for map display
   const updateInterpolatedPosition = useCallback(() => {
     if (flightData?.live && lastKnownPosition) {
       // Don't interpolate if on ground or if speed is too low
@@ -306,9 +421,9 @@ export const FlightTracker: React.FC = () => {
     } else {
       console.log('Cannot interpolate - missing flight data or last position');
     }
-  }, [flightData, lastKnownPosition, calculateInterpolatedPosition, setLastKnownPosition, setAircraftPosition, setLastDrawTime]);
+  }, [flightData, lastKnownPosition, setLastKnownPosition, setAircraftPosition, setLastDrawTime]);
 
-  // Initialize interpolation if cached data is loaded
+  // Initialize map interpolation if cached data is loaded
   useEffect(() => {
     if (flightData && lastKnownPosition && !interpolationInterval) {
       console.log('Initializing interpolation from cached data');
@@ -415,6 +530,14 @@ export const FlightTracker: React.FC = () => {
       clearInterval(interpolationInterval);
       setInterpolationInterval(null);
     }
+    if (distanceUpdateInterval) {
+      clearInterval(distanceUpdateInterval);
+      setDistanceUpdateInterval(null);
+    }
+    if (distanceInterpolationInterval) {
+      clearInterval(distanceInterpolationInterval);
+      setDistanceInterpolationInterval(null);
+    }
   };
 
   // Force refresh flight data from API
@@ -510,6 +633,11 @@ export const FlightTracker: React.FC = () => {
                 <br />
                 To: {flightData.arrival.airport} ({flightData.arrival.timezone})
                 <br />
+                {displayedDistance !== null && (
+                  <div className="font-mono text-lg font-bold mt-2">
+                    Distance: {Math.round(displayedDistance).toLocaleString()}m
+                  </div>
+                )}
                 {flightData.live && (
                   <>
                     Altitude: {metersToFeet(flightData.live.altitude)}ft
@@ -521,9 +649,6 @@ export const FlightTracker: React.FC = () => {
                     Status: {flightData.live.is_ground ? 'On Ground' : 'In Air'}
                     <br />
                     Last Updated: {new Date(flightData.live.updated).toLocaleString()}
-                    <br />
-                    Last Drawn: {lastDrawTime ? lastDrawTime.toLocaleString() : 'Never'} 
-                    <span className="ml-2 font-bold text-red-600">({secondsCounter}s ago)</span>
                     {cacheTimestamp && (
                       <>
                         <br />
