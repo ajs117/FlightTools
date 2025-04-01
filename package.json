@@ -2,6 +2,7 @@
   "name": "flighttools",
   "version": "0.1.0",
   "private": true,
+  "homepage": "https://ajs117.github.io/FlightTools/",
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
@@ -24,6 +25,7 @@
     "@testing-library/user-event": "^13.5.0",
     "@types/leaflet": "^1.9.16",
     "@types/react": "^19.0.10",
+    "gh-pages": "^6.3.0",
     "tailwindcss": "^3.4.17",
     "typescript": "^4.9.5"
   },
@@ -31,7 +33,9 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d build"
   },
   "eslintConfig": {
     "extends": [

@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import planeIcon from '../plane-icon.svg';
+import { useTheme } from '../context/ThemeContext';
 
 // Fix for default markers
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -120,6 +121,7 @@ const MapUpdater = ({ center }: { center: [number, number] }) => {
 };
 
 export const FlightTracker: React.FC = () => {
+  const { isDarkMode } = useTheme();
   const [location, setLocation] = useState<Location | null>(() => {
     const savedLocation = localStorage.getItem('lastLocation');
     return savedLocation ? JSON.parse(savedLocation) : null;
@@ -157,7 +159,6 @@ export const FlightTracker: React.FC = () => {
     const cachedTime = localStorage.getItem('cachedLastDrawTime');
     return cachedTime ? new Date(JSON.parse(cachedTime)) : null;
   });
-  const [secondsCounter, setSecondsCounter] = useState<number>(0);
   const [cacheTimestamp, setCacheTimestamp] = useState<number | null>(() => {
     const cachedData = localStorage.getItem('cachedFlightData');
     if (cachedData) {
@@ -208,18 +209,6 @@ export const FlightTracker: React.FC = () => {
     } else {
       localStorage.removeItem('cachedLastDrawTime');
     }
-  }, [lastDrawTime]);
-
-  // Seconds counter for last draw time
-  useEffect(() => {
-    if (!lastDrawTime) return;
-    
-    const counterInterval = setInterval(() => {
-      const secondsElapsed = Math.floor((new Date().getTime() - lastDrawTime.getTime()) / 1000);
-      setSecondsCounter(secondsElapsed);
-    }, 1000);
-    
-    return () => clearInterval(counterInterval);
   }, [lastDrawTime]);
 
   // Cleanup tracking interval on unmount
@@ -455,7 +444,7 @@ export const FlightTracker: React.FC = () => {
     try {
       console.log('Tracking flight:', flightNumber);
       const response = await fetch(
-        `http://api.aviationstack.com/v1/flights?access_key=0568428049f1cef2ccb5aef37792e31f&flight_iata=${flightNumber}`
+        `https://api.aviationstack.com/v1/flights?access_key=0568428049f1cef2ccb5aef37792e31f&flight_iata=${flightNumber}`
       );
       
       if (!response.ok) throw new Error('Failed to fetch flight data');
@@ -549,8 +538,8 @@ export const FlightTracker: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 p-4">
-      <div className="bg-white rounded-lg shadow p-6 max-w-7xl mx-auto">
+    <div className={`min-h-screen ${isDarkMode ? 'bg-gray-900' : 'bg-gray-100'} p-4`}>
+      <div className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow p-6 max-w-7xl mx-auto`}>
         <div className="mb-4 space-y-4">
           <div className="flex flex-wrap gap-4">
             <div className="flex-1 min-w-[200px] flex gap-2">
@@ -561,7 +550,9 @@ export const FlightTracker: React.FC = () => {
                 onKeyPress={(e) => e.key === 'Enter' && searchLocation()}
                 hidden={location !== null}
                 placeholder="Enter location (e.g., London, UK)"
-                className="flex-1 p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className={`flex-1 p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                  isDarkMode ? 'bg-gray-700 text-white border-gray-600' : 'bg-white text-gray-900'
+                }`}
               />
               <button
                 onClick={searchLocation}
@@ -579,7 +570,9 @@ export const FlightTracker: React.FC = () => {
                 onChange={(e) => setFlightNumber(e.target.value.toUpperCase())}
                 onKeyPress={(e) => e.key === 'Enter' && trackFlight()}
                 placeholder="Enter flight number (e.g., BA123)"
-                className="flex-1 p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className={`flex-1 p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                  isDarkMode ? 'bg-gray-700 text-white border-gray-600' : 'bg-white text-gray-900'
+                }`}
               />
               <button
                 onClick={trackFlight}
@@ -611,36 +604,51 @@ export const FlightTracker: React.FC = () => {
           </div>
 
           {error && (
-            <div className="p-3 bg-red-100 text-red-700 rounded">
+            <div className={`p-3 rounded ${
+              isDarkMode ? 'bg-red-900 text-red-100' : 'bg-red-100 text-red-700'
+            }`}>
               {error}
             </div>
           )}
           
-          
           {flightData && (
-            <div className="p-4 bg-blue-100 text-blue-700 rounded">
+            <div className={`p-4 rounded ${
+              isDarkMode ? 'bg-blue-900 text-blue-100' : 'bg-blue-100 text-blue-700'
+            }`}>
               <div className="flex justify-between items-center mb-3">
                 <div className="font-medium text-lg">
                   {flightData.airline.name} {flightData.flight.number}
                 </div>
               </div>
               {displayedDistance !== null && (
-                  <div className="text-center">
-                    <div className="text-sm font-medium text-blue-800 mb-1">Distance to Aircraft</div>
-                    <div className="font-mono text-2xl font-bold">
-                      {Math.round(displayedDistance).toLocaleString()}m
-                    </div>
+                <div className="text-center">
+                  <div className={`text-sm font-medium mb-1 ${
+                    isDarkMode ? 'text-blue-200' : 'text-blue-800'
+                  }`}>
+                    Distance to Aircraft
                   </div>
-                )}
+                  <div className="font-mono text-2xl font-bold">
+                    {Math.round(displayedDistance).toLocaleString()}m
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <div className="text-sm font-medium text-blue-800 text-center">From</div>
+                    <div className={`text-sm font-medium text-center ${
+                      isDarkMode ? 'text-blue-200' : 'text-blue-800'
+                    }`}>
+                      From
+                    </div>
                     <div className="text-base text-center">{flightData.departure.airport}</div>
                   </div>
                   <div>
-                    <div className="text-sm font-medium text-blue-800 text-center">To</div>
+                    <div className={`text-sm font-medium text-center ${
+                      isDarkMode ? 'text-blue-200' : 'text-blue-800'
+                    }`}>
+                      To
+                    </div>
                     <div className="text-base text-center">{flightData.arrival.airport}</div>
                   </div>
                 </div>
@@ -648,26 +656,44 @@ export const FlightTracker: React.FC = () => {
                 {flightData.live && (
                   <div className="grid grid-cols-2 gap-4 mt-2">
                     <div>
-                      <div className="text-sm font-medium text-blue-800 text-center">Altitude</div>
+                      <div className={`text-sm font-medium text-center ${
+                        isDarkMode ? 'text-blue-200' : 'text-blue-800'
+                      }`}>
+                        Altitude
+                      </div>
                       <div className="text-base text-center">{metersToFeet(flightData.live.altitude)}ft</div>
                     </div>
                     <div>
-                      <div className="text-sm font-medium text-blue-800 text-center">Speed</div>
+                      <div className={`text-sm font-medium text-center ${
+                        isDarkMode ? 'text-blue-200' : 'text-blue-800'
+                      }`}>
+                        Speed
+                      </div>
                       <div className="text-base text-center">{kmhToKnots(flightData.live.speed_horizontal)}kts</div>
                     </div>
                     <div>
-                      <div className="text-sm font-medium text-blue-800 text-center">Direction</div>
+                      <div className={`text-sm font-medium text-center ${
+                        isDarkMode ? 'text-blue-200' : 'text-blue-800'
+                      }`}>
+                        Direction
+                      </div>
                       <div className="text-base text-center">{flightData.live.direction}°</div>
                     </div>
                     <div>
-                      <div className="text-sm font-medium text-blue-800 text-center">Status</div>
+                      <div className={`text-sm font-medium text-center ${
+                        isDarkMode ? 'text-blue-200' : 'text-blue-800'
+                      }`}>
+                        Status
+                      </div>
                       <div className="text-base text-center">{flightData.live.is_ground ? 'On Ground' : 'In Air'}</div>
                     </div>
                   </div>
                 )}
 
                 {cacheTimestamp && (
-                  <div className="text-xs text-blue-600 mt-2 text-center">
+                  <div className={`text-xs mt-2 text-center ${
+                    isDarkMode ? 'text-blue-300' : 'text-blue-600'
+                  }`}>
                     Using cached data from {new Date(cacheTimestamp).toLocaleString()}
                   </div>
                 )}
@@ -676,7 +702,9 @@ export const FlightTracker: React.FC = () => {
           )}
         </div>
 
-        <div className="h-[600px] bg-gray-50 rounded border">
+        <div className={`h-[600px] rounded border ${
+          isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'
+        }`}>
           <MapContainer
             style={{ height: '100%', width: '100%' }}
             center={location ? [location.lat, location.lng] : [51.505, -0.09]}
@@ -685,7 +713,10 @@ export const FlightTracker: React.FC = () => {
           >
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              url={isDarkMode 
+                ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                : "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              }
             />
             {location && (
               <Marker 

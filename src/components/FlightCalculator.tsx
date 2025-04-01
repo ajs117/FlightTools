@@ -8,6 +8,7 @@ import { Slider } from '@mui/material';
 // @ts-ignore
 import terminator from "@joergdietrich/leaflet.terminator";
 import planeIcon from '../plane-icon.svg';
+import { useTheme } from '../context/ThemeContext';
 const airportData = require('aircodes');
 
 // Fix for default markers
@@ -154,6 +155,7 @@ const calculateBearing = (start: [number, number], end: [number, number]): numbe
 };
 
 const FlightCalculator: React.FC = () => {
+  const { isDarkMode } = useTheme();
   const [departure, setDeparture] = useState('EGBB');
   const [arrival, setArrival] = useState('EDDF');
   const [loading, setLoading] = useState(false);
@@ -292,17 +294,19 @@ const FlightCalculator: React.FC = () => {
     // Calculate the adjusted progress percentage for actual route position
     let adjustedPercentage = percentage;
     
-    // Progress through different phases: initial taxi, flight, final taxi
-    if (percentage <= 10) {
-      // Initial 10% is taxi - position stays at first waypoint
+    // Calculate taxi time percentages based on actual taxi time
+    const taxiPercentage = (taxiTime / totalDurationMs) * 100;
+    
+    if (percentage <= taxiPercentage) {
+      // Initial taxi phase - position stays at first waypoint
       adjustedPercentage = 0;
-    } else if (percentage >= 90) {
-      // Final 10% is taxi - position stays at last waypoint
+    } else if (percentage >= (100 - taxiPercentage)) {
+      // Final taxi phase - position stays at last waypoint
       adjustedPercentage = 100;
     } else {
-      // Middle 80% is actual flight
-      // Rescale from 10-90% range to 0-100% for position calculation
-      adjustedPercentage = ((percentage - 10) / 80) * 100;
+      // Flight phase - rescale percentage to account for taxi time
+      const flightRange = 100 - (2 * taxiPercentage);
+      adjustedPercentage = ((percentage - taxiPercentage) / flightRange) * 100;
     }
     
     // Calculate position along route based on adjusted percentage
@@ -415,55 +419,63 @@ const FlightCalculator: React.FC = () => {
   }, [departureTime, arrivalTime, flightPlans, calculateDuration, calculateRoutePositions]);
 
   return (
-    <div className="bg-gray-100 p-4 overflow-hidden">
-      <div className="bg-white rounded-lg shadow p-6 h-full mx-auto">
+    <div className={`${isDarkMode ? 'bg-gray-900' : 'bg-gray-100'} p-4 overflow-hidden`}>
+      <div className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow p-6 h-full mx-auto`}>
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 h-full">
           {/* Input section */}
           <div className="lg:col-span-1 space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-1`}>
                 Departure (ICAO/Name)
               </label>
               <input
                 type="text"
                 value={departure}
                 onChange={(e) => setDeparture(e.target.value.toUpperCase())}
-                className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className={`w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                  isDarkMode ? 'bg-gray-700 text-white border-gray-600' : 'bg-white text-gray-900'
+                }`}
                 placeholder="EGLL"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-1`}>
                 Departure Time
               </label>
               <input
                 type="datetime-local"
                 value={departureTime}
                 onChange={(e) => setDepartureTime(e.target.value)}
-                className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className={`w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                  isDarkMode ? 'bg-gray-700 text-white border-gray-600' : 'bg-white text-gray-900'
+                }`}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-1`}>
                 Arrival (ICAO/Name)
               </label>
               <input
                 type="text"
                 value={arrival}
                 onChange={(e) => setArrival(e.target.value.toUpperCase())}
-                className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className={`w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                  isDarkMode ? 'bg-gray-700 text-white border-gray-600' : 'bg-white text-gray-900'
+                }`}
                 placeholder="KJFK"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-1`}>
                 Arrival Time
               </label>
               <input
                 type="datetime-local"
                 value={arrivalTime}
                 onChange={(e) => setArrivalTime(e.target.value)}
-                className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className={`w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                  isDarkMode ? 'bg-gray-700 text-white border-gray-600' : 'bg-white text-gray-900'
+                }`}
               />
             </div>
             <button
@@ -486,15 +498,19 @@ const FlightCalculator: React.FC = () => {
           </div>
 
           {/* Map and details section */}
-          <div className="lg:col-span-3 space-y-6">
+          <div className="lg:col-span-3 space-y-4">
             {error && (
-              <div className="p-3 bg-red-100 text-red-700 rounded">
+              <div className={`p-3 rounded ${
+                isDarkMode ? 'bg-red-900 text-red-100' : 'bg-red-100 text-red-700'
+              }`}>
                 {error}
               </div>
             )}
             
             {/* Map container */}
-            <div className="h-[calc(100vh-300px)] bg-gray-50 rounded border">
+            <div className={`h-[calc(100vh-300px)] rounded border ${
+              isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'
+            }`}>
               <MapContainer
                 style={{ height: '100%', width: '100%' }}
                 center={[51.505, -0.09]}
@@ -503,14 +519,17 @@ const FlightCalculator: React.FC = () => {
               >
                 <TileLayer
                   attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  url={isDarkMode 
+                    ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                    : "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  }
                 />
                 <DayNightTerminator currentTime={routeProgress?.currentTime} />
                 {flightPlans.map((plan) => (
                   <React.Fragment key={plan.id}>
                     <Polyline
                       positions={plan.route.nodes.map(w => [w.lat, w.lon])}
-                      color="black"
+                      color={isDarkMode ? "white" : "black"}
                     />
                     {routeProgress && (
                       <Marker
@@ -541,44 +560,53 @@ const FlightCalculator: React.FC = () => {
 
             {/* Flight plan details */}
             {flightPlans.length > 0 && (
-              <div className="bg-gray-50 p-4 rounded border">
-                <h2 className="text-xl font-semibold mb-4">Flight Plan Details</h2>
+              <div className={`${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'} p-4 rounded border`}>
+                <h2 className={`text-xl font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                  Flight Plan Details
+                </h2>
                 <div className="space-y-4">
                   {flightPlans.map((plan) => (
                     <div key={plan.id}>
                       <div className="grid grid-cols-2 gap-4 mb-4">
                         <div>
-                          <div className="font-medium">{plan.fromICAO} → {plan.toICAO}</div>
-                          <div className="text-sm text-gray-600">{plan.fromName} → {plan.toName}</div>
+                          <div className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                            {plan.fromICAO} → {plan.toICAO}
+                          </div>
+                          <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                            {plan.fromName} → {plan.toName}
+                          </div>
                           {plan.duration && (
-                            <div className="text-sm font-medium text-blue-600">
+                            <div className="text-sm font-medium text-blue-400">
                               Duration: {plan.duration}
                             </div>
                           )}
                         </div>
                         <div className="text-right">
-                          <div className="font-medium">{Math.round(plan.distance)} nm</div>
+                          <div className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                            {Math.round(plan.distance)} nm
+                          </div>
                           {departureTime && (
-                            <div className="text-sm text-gray-600">
+                            <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                               Departure: {new Date(departureTime).toLocaleString()} - 
                               {getAirportTimezone(plan.fromICAO)?.timezone}
                             </div>
                           )}
                           {arrivalTime && (
-                            <div className="text-sm text-gray-600">
+                            <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                               Arrival: {new Date(arrivalTime).toLocaleString()} - 
                               {getAirportTimezone(plan.toICAO)?.timezone}
                             </div>
                           )}
                         </div>
                       </div>
-                      <div className="mt-4">
+                      
+                      <div>
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm text-gray-600">
+                          <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                             {routeProgress?.currentTime.toLocaleTimeString() || 'Route Progress'}
                           </span>
                           {routeProgress && (
-                            <span className="text-sm font-medium">
+                            <span className={`text-sm font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
                               {Math.round(routeProgress.percentage)}%
                             </span>
                           )}
@@ -594,14 +622,22 @@ const FlightCalculator: React.FC = () => {
                             disabled={!departureTime || !cachedPositions.length}
                             sx={{
                               '& .MuiSlider-thumb': {
-                                transition: 'none'
+                                transition: 'none',
+                                backgroundColor: isDarkMode ? '#fff' : '#1976d2',
+                                '&:hover, &.Mui-focusVisible': {
+                                  backgroundColor: isDarkMode ? '#e0e0e0' : '#1565c0',
+                                },
                               },
                               '& .MuiSlider-track': {
-                                transition: 'none'
-                              }
+                                transition: 'none',
+                                backgroundColor: isDarkMode ? '#fff' : '#1976d2',
+                              },
+                              '& .MuiSlider-rail': {
+                                backgroundColor: isDarkMode ? '#4b5563' : '#e5e7eb',
+                              },
                             }}
                           />
-                          <div className="absolute w-full top-10">
+                          <div className="relative group">
                             {cachedPositions.filter((_, idx) => idx % 3 === 0).map((pos, idx) => (
                               <div
                                 key={idx}
@@ -617,7 +653,7 @@ const FlightCalculator: React.FC = () => {
                           </div>
                         </div>
                         {routeProgress && (
-                          <div className="text-sm text-gray-600 mt-4">
+                          <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'} mt-4`}>
                             Current Position: {routeProgress.position[0].toFixed(2)}, {routeProgress.position[1].toFixed(2)}
                             <br />
                             Current Time (UTC): {(() => {
