@@ -50,6 +50,12 @@ interface FlightData {
 interface InterpolatedPosition {
   lat: number;
   lng: number;
+  name: string;
+  timestamp?: number;
+}
+
+interface CachedFlightData {
+  data: any;
   timestamp: number;
 }
 
@@ -65,7 +71,7 @@ const kmhToKnots = (kmh: number): number => {
 // Calculate interpolated position based on speed and heading
 const calculateInterpolatedPosition = (startPos: InterpolatedPosition, speed: number, heading: number): InterpolatedPosition => {
   const now = Date.now();
-  const timeDiff = (now - startPos.timestamp) / 1000; // Convert to seconds
+  const timeDiff = (now - (startPos.timestamp ?? now)) / 1000; // Convert to seconds
   const distance = (speed * timeDiff) / 3600; // Convert km/h to km
 
   // Convert heading to radians
@@ -89,7 +95,8 @@ const calculateInterpolatedPosition = (startPos: InterpolatedPosition, speed: nu
   return {
     lat: lat2 * 180 / Math.PI,
     lng: lon2 * 180 / Math.PI,
-    timestamp: now
+    timestamp: now,
+    name: startPos.name // Add the required 'name' property from the input position
   };
 };
 
@@ -167,6 +174,8 @@ export const FlightTracker: React.FC = () => {
     }
     return null;
   });
+  const [lastApiCall, setLastApiCall] = useState<number | null>(null);
+  const [cachedFlightData, setCachedFlightData] = useState<CachedFlightData | null>(null);
 
   // Save location to localStorage whenever it changes
   useEffect(() => {
@@ -435,67 +444,77 @@ export const FlightTracker: React.FC = () => {
   }, [flightData, lastKnownPosition, interpolationInterval, updateInterpolatedPosition]);
 
   // Track flight
-  const trackFlight = async () => {
-    if (!flightNumber.trim()) return;
-    
+  const trackFlight = async (forceRefresh: boolean = false) => {
+    if (!flightNumber.trim()) {
+      setError('Please enter a flight number');
+      return;
+    }
+
     setLoading(true);
     setError('');
-    
+
     try {
-      console.log('Tracking flight:', flightNumber);
+      // Check if we have cached data and it's not a force refresh
+      if (!forceRefresh && cachedFlightData) {
+        const now = Date.now();
+        const cacheAge = now - cachedFlightData.timestamp;
+        
+        // If cache is less than 5 minutes old, use it
+        if (cacheAge < 5 * 60 * 1000) {
+          setFlightData(cachedFlightData.data);
+          setLastKnownPosition({
+            lat: cachedFlightData.data.live.latitude,
+            lng: cachedFlightData.data.live.longitude,
+            name: `${cachedFlightData.data.airline.name} ${cachedFlightData.data.flight.number}`
+          });
+          setAircraftPosition({
+            lat: cachedFlightData.data.live.latitude,
+            lng: cachedFlightData.data.live.longitude,
+            name: `${cachedFlightData.data.airline.name} ${cachedFlightData.data.flight.number}`
+          });
+          setLastApiCall(cachedFlightData.timestamp);
+          setLoading(false);
+          return;
+        }
+      }
+
       const response = await fetch(
         `https://api.aviationstack.com/v1/flights?access_key=0568428049f1cef2ccb5aef37792e31f&flight_iata=${flightNumber}`
       );
-      
-      if (!response.ok) throw new Error('Failed to fetch flight data');
-      
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch flight data');
+      }
+
       const data = await response.json();
       if (!data.data || data.data.length === 0) {
-        setError('Flight not found');
-        setLoading(false);
-        return;
+        throw new Error('No flight data found');
       }
 
       const flight = data.data[0];
-      setFlightData(flight);
-      
-      // Update location with flight position
-      if (flight.live) {
-        const newPosition = {
-          lat: flight.live.latitude,
-          lng: flight.live.longitude,
-          timestamp: Date.now()
-        };
-        setLastKnownPosition(newPosition);
-        setAircraftPosition({
-          lat: flight.live.latitude,
-          lng: flight.live.longitude,
-          name: `${flight.airline.name} ${flight.flight.number}`
-        });
-        setLastDrawTime(new Date()); // Set initial draw time
+      if (!flight.live) {
+        throw new Error('No live data available for this flight');
       }
 
-      // Clear existing intervals
-      if (trackingInterval) {
-        clearInterval(trackingInterval);
-      }
-      if (interpolationInterval) {
-        clearInterval(interpolationInterval);
-      }
-      
-      // Set up intervals
-      const tracking = setInterval(trackFlight, 3600000); // Update API every hour
-      
-      // Use immediate call for testing and then set interval
-      console.log('Setting up interpolation interval...');
-      updateInterpolatedPosition(); // Initial call
-      const interpolation = setInterval(() => {
-        console.log('Interpolation interval triggered');
-        updateInterpolatedPosition();
-      }, 5000); // Update position every 5 seconds
-      
-      setTrackingInterval(tracking);
-      setInterpolationInterval(interpolation);
+      // Cache the new data
+      const newCache: CachedFlightData = {
+        data: flight,
+        timestamp: Date.now()
+      };
+      setCachedFlightData(newCache);
+      setLastApiCall(newCache.timestamp);
+
+      setFlightData(flight);
+      setLastKnownPosition({
+        lat: flight.live.latitude,
+        lng: flight.live.longitude,
+        name: `${flight.airline.name} ${flight.flight.number}`
+      });
+      setAircraftPosition({
+        lat: flight.live.latitude,
+        lng: flight.live.longitude,
+        name: `${flight.airline.name} ${flight.flight.number}`
+      });
     } catch (err) {
       setError('Error tracking flight: ' + (err instanceof Error ? err.message : 'Unknown error'));
     } finally {
@@ -531,10 +550,50 @@ export const FlightTracker: React.FC = () => {
   };
 
   // Force refresh flight data from API
-  const refreshFlightData = () => {
-    if (flightNumber) {
-      trackFlight();
+  const handleRefreshClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    trackFlight(true);
+  };
+
+  const interpolatePosition = (startPos: InterpolatedPosition, endPos: InterpolatedPosition, progress: number): InterpolatedPosition => {
+    const startTime = startPos.timestamp || 0;
+    const endTime = endPos.timestamp || 1;
+    const currentTime = startTime + (endTime - startTime) * progress;
+    
+    return {
+      lat: startPos.lat + (endPos.lat - startPos.lat) * progress,
+      lng: startPos.lng + (endPos.lng - startPos.lng) * progress,
+      name: `${startPos.name} → ${endPos.name}`,
+      timestamp: currentTime
+    };
+  };
+
+  const updateAircraftPosition = (progress: number) => {
+    if (lastKnownPosition && aircraftPosition) {
+      const interpolated = interpolatePosition(
+        {
+          ...lastKnownPosition,
+          name: lastKnownPosition.name || 'Unknown Location'
+        },
+        {
+          ...aircraftPosition,
+          name: aircraftPosition.name || 'Unknown Location'
+        },
+        progress
+      );
+      setAircraftPosition(interpolated);
     }
+  };
+
+  const handleLocationUpdate = (location: Location) => {
+    const position: InterpolatedPosition = {
+      lat: location.lat,
+      lng: location.lng,
+      name: location.name || 'Unknown Location',
+      timestamp: Date.now()
+    };
+    setLastKnownPosition(position);
+    setAircraftPosition(position);
   };
 
   return (
@@ -575,7 +634,7 @@ export const FlightTracker: React.FC = () => {
                 }`}
               />
               <button
-                onClick={trackFlight}
+                onClick={(e) => trackFlight()}
                 disabled={loading || !flightNumber.trim()}
                 className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-purple-300 whitespace-nowrap"
               >
@@ -594,7 +653,7 @@ export const FlightTracker: React.FC = () => {
               )}
               {flightData && (
                 <button
-                  onClick={refreshFlightData}
+                  onClick={handleRefreshClick}
                   className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 whitespace-nowrap"
                 >
                   Refresh
@@ -698,6 +757,14 @@ export const FlightTracker: React.FC = () => {
                   </div>
                 )}
               </div>
+
+              {lastApiCall && (
+                <div className={`text-xs mt-2 text-center ${
+                  isDarkMode ? 'text-blue-300' : 'text-blue-600'
+                }`}>
+                  Last API Update: {new Date(lastApiCall).toLocaleString()}
+                </div>
+              )}
             </div>
           )}
         </div>
