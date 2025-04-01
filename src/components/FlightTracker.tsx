@@ -459,8 +459,8 @@ export const FlightTracker: React.FC = () => {
         const now = Date.now();
         const cacheAge = now - cachedFlightData.timestamp;
         
-        // If cache is less than 5 minutes old, use it
-        if (cacheAge < 5 * 60 * 1000) {
+        // If cache flight number matches, use it
+        if (cachedFlightData.data.flight.iata === flightNumber) {
           setFlightData(cachedFlightData.data);
           setLastKnownPosition({
             lat: cachedFlightData.data.live.latitude,
@@ -472,7 +472,6 @@ export const FlightTracker: React.FC = () => {
             lng: cachedFlightData.data.live.longitude,
             name: `${cachedFlightData.data.airline.name} ${cachedFlightData.data.flight.number}`
           });
-          setLastApiCall(cachedFlightData.timestamp);
           setLoading(false);
           return;
         }
@@ -503,6 +502,7 @@ export const FlightTracker: React.FC = () => {
       };
       setCachedFlightData(newCache);
       setLastApiCall(newCache.timestamp);
+      sessionStorage.setItem('lastApiCall', newCache.timestamp.toString());
 
       setFlightData(flight);
       setLastKnownPosition({
@@ -753,18 +753,10 @@ export const FlightTracker: React.FC = () => {
                   <div className={`text-xs mt-2 text-center ${
                     isDarkMode ? 'text-blue-300' : 'text-blue-600'
                   }`}>
-                    Using cached data from {new Date(cacheTimestamp).toLocaleString()}
+                    Using API data from {sessionStorage.getItem('lastApiCall') ? new Date(parseInt(sessionStorage.getItem('lastApiCall')!)).toLocaleString() : "N/A"}
                   </div>
                 )}
               </div>
-
-              {lastApiCall && (
-                <div className={`text-xs mt-2 text-center ${
-                  isDarkMode ? 'text-blue-300' : 'text-blue-600'
-                }`}>
-                  Last API Update: {new Date(lastApiCall).toLocaleString()}
-                </div>
-              )}
             </div>
           )}
         </div>
