@@ -1,0 +1,16 @@
+{
+  "files": {
+    "main.css": "/FlightTools/static/css/main.32d3253d.css",
+    "main.js": "/FlightTools/static/js/main.0cd4cdcb.js",
+    "static/js/453.a02d9373.chunk.js": "/FlightTools/static/js/453.a02d9373.chunk.js",
+    "index.html": "/FlightTools/index.html",
+    "static/media/plane-icon.svg": "/FlightTools/static/media/plane-icon.5312c99550d9e701054eea554971757c.svg",
+    "main.32d3253d.css.map": "/FlightTools/static/css/main.32d3253d.css.map",
+    "main.0cd4cdcb.js.map": "/FlightTools/static/js/main.0cd4cdcb.js.map",
+    "453.a02d9373.chunk.js.map": "/FlightTools/static/js/453.a02d9373.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.32d3253d.css",
+    "static/js/main.0cd4cdcb.js"
+  ]
+}
