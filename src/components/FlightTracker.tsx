@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
@@ -72,10 +72,39 @@ export const FlightTracker: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [flightNumber, setFlightNumber] = useState('');
-  const [flightData, setFlightData] = useState<FlightData | null>(null);
-  const [lastKnownPosition, setLastKnownPosition] = useState<InterpolatedPosition | null>(null);
+  const [flightData, setFlightData] = useState<FlightData | null>(() => {
+    const cachedData = localStorage.getItem('cachedFlightData');
+    if (cachedData) {
+      const { data, timestamp, flightNum } = JSON.parse(cachedData);
+      // Check if the data is less than 24 hours old
+      if (Date.now() - timestamp < 24 * 60 * 60 * 1000) {
+        setFlightNumber(flightNum);
+        return data;
+      } else {
+        localStorage.removeItem('cachedFlightData');
+      }
+    }
+    return null;
+  });
+  const [lastKnownPosition, setLastKnownPosition] = useState<InterpolatedPosition | null>(() => {
+    const cachedPosition = localStorage.getItem('cachedPosition');
+    return cachedPosition ? JSON.parse(cachedPosition) : null;
+  });
   const [trackingInterval, setTrackingInterval] = useState<NodeJS.Timeout | null>(null);
   const [interpolationInterval, setInterpolationInterval] = useState<NodeJS.Timeout | null>(null);
+  const [lastDrawTime, setLastDrawTime] = useState<Date | null>(() => {
+    const cachedTime = localStorage.getItem('cachedLastDrawTime');
+    return cachedTime ? new Date(JSON.parse(cachedTime)) : null;
+  });
+  const [secondsCounter, setSecondsCounter] = useState<number>(0);
+  const [cacheTimestamp, setCacheTimestamp] = useState<number | null>(() => {
+    const cachedData = localStorage.getItem('cachedFlightData');
+    if (cachedData) {
+      const { timestamp } = JSON.parse(cachedData);
+      return timestamp;
+    }
+    return null;
+  });
 
   // Save location to localStorage whenever it changes
   useEffect(() => {
@@ -85,6 +114,52 @@ export const FlightTracker: React.FC = () => {
       localStorage.removeItem('lastLocation');
     }
   }, [location]);
+
+  // Save flight data to localStorage whenever it changes
+  useEffect(() => {
+    if (flightData && flightNumber) {
+      const timestamp = Date.now();
+      setCacheTimestamp(timestamp);
+      localStorage.setItem('cachedFlightData', JSON.stringify({
+        data: flightData,
+        timestamp,
+        flightNum: flightNumber
+      }));
+    } else {
+      setCacheTimestamp(null);
+      localStorage.removeItem('cachedFlightData');
+    }
+  }, [flightData, flightNumber]);
+
+  // Save lastKnownPosition to localStorage whenever it changes
+  useEffect(() => {
+    if (lastKnownPosition) {
+      localStorage.setItem('cachedPosition', JSON.stringify(lastKnownPosition));
+    } else {
+      localStorage.removeItem('cachedPosition');
+    }
+  }, [lastKnownPosition]);
+
+  // Save lastDrawTime to localStorage whenever it changes
+  useEffect(() => {
+    if (lastDrawTime) {
+      localStorage.setItem('cachedLastDrawTime', JSON.stringify(lastDrawTime.toISOString()));
+    } else {
+      localStorage.removeItem('cachedLastDrawTime');
+    }
+  }, [lastDrawTime]);
+
+  // Seconds counter for last draw time
+  useEffect(() => {
+    if (!lastDrawTime) return;
+    
+    const counterInterval = setInterval(() => {
+      const secondsElapsed = Math.floor((new Date().getTime() - lastDrawTime.getTime()) / 1000);
+      setSecondsCounter(secondsElapsed);
+    }, 1000);
+    
+    return () => clearInterval(counterInterval);
+  }, [lastDrawTime]);
 
   // Cleanup tracking interval on unmount
   useEffect(() => {
@@ -161,7 +236,7 @@ export const FlightTracker: React.FC = () => {
   };
 
   // Calculate interpolated position based on speed and heading
-  const calculateInterpolatedPosition = (startPos: InterpolatedPosition, speed: number, heading: number): InterpolatedPosition => {
+  const calculateInterpolatedPosition = useCallback((startPos: InterpolatedPosition, speed: number, heading: number): InterpolatedPosition => {
     const now = Date.now();
     const timeDiff = (now - startPos.timestamp) / 1000; // Convert to seconds
     const distance = (speed * timeDiff) / 3600; // Convert km/h to km
@@ -189,30 +264,59 @@ export const FlightTracker: React.FC = () => {
       lng: lon2 * 180 / Math.PI,
       timestamp: now
     };
-  };
+  }, []);
 
   // Update interpolated position
-  const updateInterpolatedPosition = () => {
+  const updateInterpolatedPosition = useCallback(() => {
     if (flightData?.live && lastKnownPosition) {
       // Don't interpolate if on ground or if speed is too low
       if (flightData.live.is_ground || flightData.live.speed_horizontal < 50) {
+        console.log('Not interpolating - aircraft on ground or speed too low');
+        setLastDrawTime(new Date()); // Still update the timestamp to show it's trying
         return;
       }
 
+      console.log('Calculating new position...');
       const newPos = calculateInterpolatedPosition(
         lastKnownPosition,
         flightData.live.speed_horizontal,
         flightData.live.direction
       );
       
+      console.log(`New position: ${newPos.lat}, ${newPos.lng}`);
       setLastKnownPosition(newPos);
       setLocation({
         lat: newPos.lat,
         lng: newPos.lng,
         name: `${flightData.airline.name} ${flightData.flight.number}`
       });
+      setLastDrawTime(new Date());
+    } else {
+      console.log('Cannot interpolate - missing flight data or last position');
     }
-  };
+  }, [flightData, lastKnownPosition, calculateInterpolatedPosition, setLastKnownPosition, setLocation, setLastDrawTime]);
+
+  // Initialize interpolation if cached data is loaded
+  useEffect(() => {
+    if (flightData && lastKnownPosition && !interpolationInterval) {
+      console.log('Initializing interpolation from cached data');
+      // Use immediate call for testing and then set interval
+      updateInterpolatedPosition(); // Initial call
+      const interpolation = setInterval(() => {
+        console.log('Interpolation interval triggered');
+        updateInterpolatedPosition();
+      }, 5000); // Update position every 5 seconds
+      
+      setInterpolationInterval(interpolation);
+    }
+
+    // Clean up interval when component unmounts
+    return () => {
+      if (interpolationInterval) {
+        clearInterval(interpolationInterval);
+      }
+    };
+  }, [flightData, lastKnownPosition, interpolationInterval, updateInterpolatedPosition]);
 
   // Track flight
   const trackFlight = async () => {
@@ -251,6 +355,7 @@ export const FlightTracker: React.FC = () => {
           lng: flight.live.longitude,
           name: `${flight.airline.name} ${flight.flight.number}`
         });
+        setLastDrawTime(new Date()); // Set initial draw time
       }
 
       // Clear existing intervals
@@ -263,7 +368,14 @@ export const FlightTracker: React.FC = () => {
       
       // Set up intervals
       const tracking = setInterval(trackFlight, 3600000); // Update API every hour
-      const interpolation = setInterval(updateInterpolatedPosition, 5000); // Update position every 5 seconds
+      
+      // Use immediate call for testing and then set interval
+      console.log('Setting up interpolation interval...');
+      updateInterpolatedPosition(); // Initial call
+      const interpolation = setInterval(() => {
+        console.log('Interpolation interval triggered');
+        updateInterpolatedPosition();
+      }, 5000); // Update position every 5 seconds
       
       setTrackingInterval(tracking);
       setInterpolationInterval(interpolation);
@@ -289,6 +401,13 @@ export const FlightTracker: React.FC = () => {
     if (interpolationInterval) {
       clearInterval(interpolationInterval);
       setInterpolationInterval(null);
+    }
+  };
+
+  // Force refresh flight data from API
+  const refreshFlightData = () => {
+    if (flightNumber) {
+      trackFlight();
     }
   };
 
@@ -362,8 +481,16 @@ export const FlightTracker: React.FC = () => {
 
           {flightData && (
             <div className="p-3 bg-blue-100 text-blue-700 rounded">
-              <div className="font-medium">
-                {flightData.airline.name} {flightData.flight.number}
+              <div className="flex justify-between items-center">
+                <div className="font-medium">
+                  {flightData.airline.name} {flightData.flight.number}
+                </div>
+                <button
+                  onClick={refreshFlightData}
+                  className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+                >
+                  Refresh Data
+                </button>
               </div>
               <div className="text-sm">
                 From: {flightData.departure.airport} ({flightData.departure.timezone})
@@ -381,6 +508,17 @@ export const FlightTracker: React.FC = () => {
                     Status: {flightData.live.is_ground ? 'On Ground' : 'In Air'}
                     <br />
                     Last Updated: {new Date(flightData.live.updated).toLocaleString()}
+                    <br />
+                    Last Drawn: {lastDrawTime ? lastDrawTime.toLocaleString() : 'Never'} 
+                    <span className="ml-2 font-bold text-red-600">({secondsCounter}s ago)</span>
+                    {cacheTimestamp && (
+                      <>
+                        <br />
+                        <span className="text-xs text-gray-500">
+                          Using cached data from {new Date(cacheTimestamp).toLocaleString()}
+                        </span>
+                      </>
+                    )}
                   </>
                 )}
               </div>
@@ -402,6 +540,7 @@ export const FlightTracker: React.FC = () => {
             {location && (
               <>
                 <Marker 
+                  key={`${location.lat.toFixed(6)}-${location.lng.toFixed(6)}-${flightData?.live?.direction || 0}-${lastDrawTime?.getTime() || 0}`}
                   position={[location.lat, location.lng]} 
                   icon={L.divIcon({
                     html: `<div style="transform: rotate(${flightData?.live?.direction || 0}deg)">
