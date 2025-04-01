@@ -52,6 +52,15 @@ interface InterpolatedPosition {
   timestamp: number;
 }
 
+// Conversion functions
+const metersToFeet = (meters: number): number => {
+  return Math.round(meters * 3.28084);
+};
+
+const kmhToKnots = (kmh: number): number => {
+  return Math.round(kmh * 0.539957);
+};
+
 // Component to handle map updates
 const MapUpdater = ({ center }: { center: [number, number] }) => {
   const map = useMap();
@@ -68,6 +77,7 @@ export const FlightTracker: React.FC = () => {
     const savedLocation = localStorage.getItem('lastLocation');
     return savedLocation ? JSON.parse(savedLocation) : null;
   });
+  const [aircraftPosition, setAircraftPosition] = useState<Location | null>(null);
   const [error, setError] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
@@ -192,6 +202,7 @@ export const FlightTracker: React.FC = () => {
           name: 'Current Location'
         };
         setLocation(newLocation);
+        setAircraftPosition(null); // Clear aircraft position when getting current location
         setLoading(false);
       },
       (error) => {
@@ -228,6 +239,7 @@ export const FlightTracker: React.FC = () => {
         name: data[0].display_name
       };
       setLocation(newLocation);
+      setAircraftPosition(null); // Clear aircraft position when searching for location
     } catch (err) {
       setError('Error searching location: ' + (err instanceof Error ? err.message : 'Unknown error'));
     } finally {
@@ -285,7 +297,7 @@ export const FlightTracker: React.FC = () => {
       
       console.log(`New position: ${newPos.lat}, ${newPos.lng}`);
       setLastKnownPosition(newPos);
-      setLocation({
+      setAircraftPosition({
         lat: newPos.lat,
         lng: newPos.lng,
         name: `${flightData.airline.name} ${flightData.flight.number}`
@@ -294,7 +306,7 @@ export const FlightTracker: React.FC = () => {
     } else {
       console.log('Cannot interpolate - missing flight data or last position');
     }
-  }, [flightData, lastKnownPosition, calculateInterpolatedPosition, setLastKnownPosition, setLocation, setLastDrawTime]);
+  }, [flightData, lastKnownPosition, calculateInterpolatedPosition, setLastKnownPosition, setAircraftPosition, setLastDrawTime]);
 
   // Initialize interpolation if cached data is loaded
   useEffect(() => {
@@ -350,7 +362,7 @@ export const FlightTracker: React.FC = () => {
           timestamp: Date.now()
         };
         setLastKnownPosition(newPosition);
-        setLocation({
+        setAircraftPosition({
           lat: flight.live.latitude,
           lng: flight.live.longitude,
           name: `${flight.airline.name} ${flight.flight.number}`
@@ -389,6 +401,7 @@ export const FlightTracker: React.FC = () => {
   // Clear stored location
   const clearLocation = () => {
     setLocation(null);
+    setAircraftPosition(null);
     setSearchQuery('');
     setError('');
     setFlightNumber('');
@@ -499,9 +512,9 @@ export const FlightTracker: React.FC = () => {
                 <br />
                 {flightData.live && (
                   <>
-                    Altitude: {flightData.live.altitude}m
+                    Altitude: {metersToFeet(flightData.live.altitude)}ft
                     <br />
-                    Speed: {flightData.live.speed_horizontal}km/h
+                    Speed: {kmhToKnots(flightData.live.speed_horizontal)}kts
                     <br />
                     Direction: {flightData.live.direction}°
                     <br />
@@ -538,10 +551,15 @@ export const FlightTracker: React.FC = () => {
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
             {location && (
+              <Marker 
+                position={[location.lat, location.lng]} 
+              />
+            )}
+            {aircraftPosition && (
               <>
                 <Marker 
-                  key={`${location.lat.toFixed(6)}-${location.lng.toFixed(6)}-${flightData?.live?.direction || 0}-${lastDrawTime?.getTime() || 0}`}
-                  position={[location.lat, location.lng]} 
+                  key={`${aircraftPosition.lat.toFixed(6)}-${aircraftPosition.lng.toFixed(6)}-${flightData?.live?.direction || 0}-${lastDrawTime?.getTime() || 0}`}
+                  position={[aircraftPosition.lat, aircraftPosition.lng]} 
                   icon={L.divIcon({
                     html: `<div style="transform: rotate(${flightData?.live?.direction || 0}deg)">
                       <img src="${planeIcon}" alt="plane" style="width: 24px; height: 24px;" />
@@ -551,7 +569,7 @@ export const FlightTracker: React.FC = () => {
                     iconAnchor: [12, 12]
                   })}
                 />
-                <MapUpdater center={[location.lat, location.lng]} />
+                <MapUpdater center={[aircraftPosition.lat, aircraftPosition.lng]} />
               </>
             )}
           </MapContainer>
