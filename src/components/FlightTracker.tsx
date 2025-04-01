@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+import planeIcon from '../plane-icon.svg';
 
 // Fix for default markers
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -193,6 +194,11 @@ export const FlightTracker: React.FC = () => {
   // Update interpolated position
   const updateInterpolatedPosition = () => {
     if (flightData?.live && lastKnownPosition) {
+      // Don't interpolate if on ground or if speed is too low
+      if (flightData.live.is_ground || flightData.live.speed_horizontal < 50) {
+        return;
+      }
+
       const newPos = calculateInterpolatedPosition(
         lastKnownPosition,
         flightData.live.speed_horizontal,
@@ -366,7 +372,7 @@ export const FlightTracker: React.FC = () => {
                 <br />
                 {flightData.live && (
                   <>
-                    Altitude: {flightData.live.altitude}ft
+                    Altitude: {flightData.live.altitude}m
                     <br />
                     Speed: {flightData.live.speed_horizontal}km/h
                     <br />
@@ -395,7 +401,17 @@ export const FlightTracker: React.FC = () => {
             />
             {location && (
               <>
-                <Marker position={[location.lat, location.lng]} />
+                <Marker 
+                  position={[location.lat, location.lng]} 
+                  icon={L.divIcon({
+                    html: `<div style="transform: rotate(${flightData?.live?.direction || 0}deg)">
+                      <img src="${planeIcon}" alt="plane" style="width: 24px; height: 24px;" />
+                    </div>`,
+                    className: '',
+                    iconSize: [24, 24],
+                    iconAnchor: [12, 12]
+                  })}
+                />
                 <MapUpdater center={[location.lat, location.lng]} />
               </>
             )}
