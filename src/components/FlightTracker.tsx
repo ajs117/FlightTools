@@ -1,15 +1,9 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import planeIcon from '../plane-icon.svg';
 import { useTheme } from '../context/ThemeContext';
-import { metersToFeet, kmhToKnots } from '../utils/conversions';
-import { calculateDistance, calculateInterpolatedPosition, InterpolatedPosition } from '../utils/geo';
-import { initializeLeaflet, getTileLayerUrl, createPlaneIcon } from '../utils/leafletHelpers';
-
-// Initialize Leaflet once
-initializeLeaflet();
 
 // Fix for default markers
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -43,7 +37,7 @@ interface FlightData {
   };
   live: {
     latitude: number;
-    lnggitude: number;
+    longitude: number;
     altitude: number;
     direction: number;
     speed_horizontal: number;
@@ -53,10 +47,74 @@ interface FlightData {
   };
 }
 
+interface InterpolatedPosition {
+  lat: number;
+  lng: number;
+  name: string;
+  timestamp?: number;
+}
+
 interface CachedFlightData {
   data: any;
   timestamp: number;
 }
+
+// Conversion functions
+const metersToFeet = (meters: number): number => {
+  return Math.round(meters * 3.28084);
+};
+
+const kmhToKnots = (kmh: number): number => {
+  return Math.round(kmh * 0.539957);
+};
+
+// Calculate interpolated position based on speed and heading
+const calculateInterpolatedPosition = (startPos: InterpolatedPosition, speed: number, heading: number): InterpolatedPosition => {
+  const now = Date.now();
+  const timeDiff = (now - (startPos.timestamp ?? now)) / 1000; // Convert to seconds
+  const distance = (speed * timeDiff) / 3600; // Convert km/h to km
+
+  // Convert heading to radians
+  const headingRad = (heading * Math.PI) / 180;
+  
+  // Calculate new position using great circle formula
+  const lat1 = startPos.lat * Math.PI / 180;
+  const lon1 = startPos.lng * Math.PI / 180;
+  const d = distance / 6371; // Earth's radius in km
+
+  const lat2 = Math.asin(
+    Math.sin(lat1) * Math.cos(d) +
+    Math.cos(lat1) * Math.sin(d) * Math.cos(headingRad)
+  );
+
+  const lon2 = lon1 + Math.atan2(
+    Math.sin(headingRad) * Math.sin(d) * Math.cos(lat1),
+    Math.cos(d) - Math.sin(lat1) * Math.sin(lat2)
+  );
+
+  return {
+    lat: lat2 * 180 / Math.PI,
+    lng: lon2 * 180 / Math.PI,
+    timestamp: now,
+    name: startPos.name // Add the required 'name' property from the input position
+  };
+};
+
+// Calculate distance between two points using Haversine formula
+const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+  const R = 6371e3; // Earth's radius in meters
+  const φ1 = lat1 * Math.PI / 180;
+  const φ2 = lat2 * Math.PI / 180;
+  const Δφ = (lat2 - lat1) * Math.PI / 180;
+  const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) *
+    Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return Math.round(R * c); // Distance in meters
+};
 
 // Component to handle map updates
 const MapUpdater = ({ center }: { center: [number, number] }) => {
@@ -211,7 +269,7 @@ export const FlightTracker: React.FC = () => {
           );
           setDistance(currentDistance);
         }
-      }, 25); // Update every 25ms for smooth display
+      }, 25); // Update every 100ms for smooth display
 
       setDistanceUpdateInterval(interval);
 
@@ -246,7 +304,7 @@ export const FlightTracker: React.FC = () => {
         setDistanceInterpolationInterval(null);
       }
     }
-  }, [location, aircraftPosition, flightData, lastKnownPosition]);
+  }, [location, aircraftPosition, flightData, lastKnownPosition, calculateInterpolatedPosition]);
 
   // Animate distance display
   useEffect(() => {
@@ -321,7 +379,7 @@ export const FlightTracker: React.FC = () => {
       
       const newLocation = {
         lat: parseFloat(data[0].lat),
-        lng: parseFloat(data[0].lng),
+        lng: parseFloat(data[0].lon),
         name: data[0].display_name
       };
       setLocation(newLocation);
@@ -406,13 +464,12 @@ export const FlightTracker: React.FC = () => {
           setFlightData(cachedFlightData.data);
           setLastKnownPosition({
             lat: cachedFlightData.data.live.latitude,
-            lng: cachedFlightData.data.live.lnggitude,
-            name: `${cachedFlightData.data.airline.name} ${cachedFlightData.data.flight.number}`,
-            timestamp: Date.now()
+            lng: cachedFlightData.data.live.longitude,
+            name: `${cachedFlightData.data.airline.name} ${cachedFlightData.data.flight.number}`
           });
           setAircraftPosition({
             lat: cachedFlightData.data.live.latitude,
-            lng: cachedFlightData.data.live.lnggitude,
+            lng: cachedFlightData.data.live.longitude,
             name: `${cachedFlightData.data.airline.name} ${cachedFlightData.data.flight.number}`
           });
           setLoading(false);
@@ -450,13 +507,12 @@ export const FlightTracker: React.FC = () => {
       setFlightData(flight);
       setLastKnownPosition({
         lat: flight.live.latitude,
-        lng: flight.live.lnggitude,
-        name: `${flight.airline.name} ${flight.flight.number}`,
-        timestamp: Date.now()
+        lng: flight.live.longitude,
+        name: `${flight.airline.name} ${flight.flight.number}`
       });
       setAircraftPosition({
         lat: flight.live.latitude,
-        lng: flight.live.lnggitude,
+        lng: flight.live.longitude,
         name: `${flight.airline.name} ${flight.flight.number}`
       });
     } catch (err) {
@@ -499,6 +555,47 @@ export const FlightTracker: React.FC = () => {
     trackFlight(true);
   };
 
+  const interpolatePosition = (startPos: InterpolatedPosition, endPos: InterpolatedPosition, progress: number): InterpolatedPosition => {
+    const startTime = startPos.timestamp || 0;
+    const endTime = endPos.timestamp || 1;
+    const currentTime = startTime + (endTime - startTime) * progress;
+    
+    return {
+      lat: startPos.lat + (endPos.lat - startPos.lat) * progress,
+      lng: startPos.lng + (endPos.lng - startPos.lng) * progress,
+      name: `${startPos.name} → ${endPos.name}`,
+      timestamp: currentTime
+    };
+  };
+
+  const updateAircraftPosition = (progress: number) => {
+    if (lastKnownPosition && aircraftPosition) {
+      const interpolated = interpolatePosition(
+        {
+          ...lastKnownPosition,
+          name: lastKnownPosition.name || 'Unknown Location'
+        },
+        {
+          ...aircraftPosition,
+          name: aircraftPosition.name || 'Unknown Location'
+        },
+        progress
+      );
+      setAircraftPosition(interpolated);
+    }
+  };
+
+  const handleLocationUpdate = (location: Location) => {
+    const position: InterpolatedPosition = {
+      lat: location.lat,
+      lng: location.lng,
+      name: location.name || 'Unknown Location',
+      timestamp: Date.now()
+    };
+    setLastKnownPosition(position);
+    setAircraftPosition(position);
+  };
+
   return (
     <div className={`min-h-screen ${isDarkMode ? 'bg-gray-900' : 'bg-gray-100'} p-4`}>
       <div className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow p-6 max-w-7xl mx-auto`}>
@@ -511,7 +608,7 @@ export const FlightTracker: React.FC = () => {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && searchLocation()}
                 hidden={location !== null}
-                placeholder="Enter location (e.g., Lngdon, UK)"
+                placeholder="Enter location (e.g., London, UK)"
                 className={`flex-1 p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                   isDarkMode ? 'bg-gray-700 text-white border-gray-600' : 'bg-white text-gray-900'
                 }`}
@@ -675,7 +772,10 @@ export const FlightTracker: React.FC = () => {
           >
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-              url={getTileLayerUrl(isDarkMode)}
+              url={isDarkMode 
+                ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                : "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              }
             />
             {location && (
               <Marker 
@@ -687,7 +787,14 @@ export const FlightTracker: React.FC = () => {
                 <Marker 
                   key={`${aircraftPosition.lat.toFixed(6)}-${aircraftPosition.lng.toFixed(6)}-${flightData?.live?.direction || 0}-${lastDrawTime?.getTime() || 0}`}
                   position={[aircraftPosition.lat, aircraftPosition.lng]} 
-                  icon={createPlaneIcon(flightData?.live?.direction || 0)}
+                  icon={L.divIcon({
+                    html: `<div style="transform: rotate(${flightData?.live?.direction || 0}deg)">
+                      <img src="${planeIcon}" alt="plane" style="width: 24px; height: 24px;" />
+                    </div>`,
+                    className: '',
+                    iconSize: [24, 24],
+                    iconAnchor: [12, 12]
+                  })}
                 />
                 <MapUpdater center={[aircraftPosition.lat, aircraftPosition.lng]} />
               </>

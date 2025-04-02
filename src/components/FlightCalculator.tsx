@@ -9,14 +9,7 @@ import { Slider } from '@mui/material';
 import terminator from "@joergdietrich/leaflet.terminator";
 import planeIcon from '../plane-icon.svg';
 import { useTheme } from '../context/ThemeContext';
-import { calculateBearing } from '../utils/geo';
-import { formatDuration, calculateDuration, convertToUTC, formatDateTime, parseDuration } from '../utils/time';
-import { Waypoint } from '../utils/geo';
-import { initializeLeaflet, getTileLayerUrl, createPlaneIcon } from '../utils/leafletHelpers';
 const airportData = require('aircodes');
-
-// Initialize Leaflet
-initializeLeaflet();
 
 // Fix for default markers
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -25,6 +18,12 @@ L.Icon.Default.mergeOptions({
   iconUrl: require('leaflet/dist/images/marker-icon.png'),
   shadowUrl: require('leaflet/dist/images/marker-shadow.png'),
 });
+
+interface Waypoint {
+  lat: number;
+  lon: number;
+  ident: string;
+}
 
 interface AirportTimezone {
   code: string;
@@ -70,7 +69,7 @@ const SetBoundsToRoute = ({ waypoints }: { waypoints: Waypoint[] }) => {
   useEffect(() => {
     if (waypoints.length < 2) return;
     
-    const latLngs = waypoints.map(w => L.latLng(w.lat, w.lng));
+    const latLngs = waypoints.map(w => L.latLng(w.lat, w.lon));
     const bounds = L.latLngBounds(latLngs);
     
     // Add padding around the bounds
@@ -136,6 +135,25 @@ const DayNightTerminator = ({ currentTime }: DayNightTerminatorProps) => {
   return null;
 };
 
+const calculateBearing = (start: [number, number], end: [number, number]): number => {
+  const startLat = start[0] * Math.PI / 180;
+  const startLng = start[1] * Math.PI / 180;
+  const endLat = end[0] * Math.PI / 180;
+  const endLng = end[1] * Math.PI / 180;
+
+  const dLng = endLng - startLng;
+
+  const y = Math.sin(dLng) * Math.cos(endLat);
+  const x = Math.cos(startLat) * Math.sin(endLat) -
+            Math.sin(startLat) * Math.cos(endLat) * Math.cos(dLng);
+
+  let bearing = Math.atan2(y, x) * 180 / Math.PI;
+  if (bearing < 0) {
+    bearing += 360;
+  }
+  return bearing;
+};
+
 const FlightCalculator: React.FC = () => {
   const { isDarkMode } = useTheme();
   const [departure, setDeparture] = useState('EGBB');
@@ -163,6 +181,28 @@ const FlightCalculator: React.FC = () => {
       return null;
     }
   }, []);
+
+  const calculateDuration = useCallback((depTime: string, arrTime: string, depICAO: string, arrICAO: string): string => {
+    const depAirport = getAirportTimezone(depICAO);
+    const arrAirport = getAirportTimezone(arrICAO);
+
+    if (!depAirport || !arrAirport) {
+      return 'Unknown duration';
+    }
+
+    const depDate = new Date(depTime);
+    const arrDate = new Date(arrTime);
+
+    // Convert to UTC considering timezone offsets
+    const depUTC = new Date(depDate.getTime() - (depAirport.offset.dst * 3600000));
+    const arrUTC = new Date(arrDate.getTime() - (arrAirport.offset.dst * 3600000));
+
+    const durationMs = arrUTC.getTime() - depUTC.getTime();
+    const hours = Math.floor(durationMs / (1000 * 60 * 60));
+    const minutes = Math.round((durationMs % (1000 * 60 * 60)) / (1000 * 60));
+
+    return `${hours}h ${minutes}m`;
+  }, [getAirportTimezone]);
 
   const searchFlightPlans = async () => {
     if (!departure || !arrival) {
@@ -215,13 +255,11 @@ const FlightCalculator: React.FC = () => {
       // Ensure waypoints is always an array
       planDetails.route.nodes = planDetails.route.nodes || [];
       if (departureTime && arrivalTime) {
-        const depAirport = getAirportTimezone(planDetails.fromICAO);
-        const arrAirport = getAirportTimezone(planDetails.toICAO);
         planDetails.duration = calculateDuration(
           departureTime,
           arrivalTime,
-          depAirport,
-          arrAirport
+          planDetails.fromICAO,
+          planDetails.toICAO
         );
       }
       setFlightPlans([planDetails]);
@@ -247,8 +285,9 @@ const FlightCalculator: React.FC = () => {
   
     // Add 10 minutes for taxi at each end
     const taxiTime = 10 * 60 * 1000; // 10 minutes in milliseconds
-    const { hours, minutes } = parseDuration(duration);
-
+    const [hours, minutes] = duration.split('h ').map(part => 
+      parseInt(part.replace('m', ''))
+    );
     const totalDurationMs = (hours * 3600000) + (minutes * 60000);
     const flightDurationMs = totalDurationMs - (taxiTime * 2);
     
@@ -270,7 +309,7 @@ const FlightCalculator: React.FC = () => {
       adjustedPercentage = ((percentage - taxiPercentage) / flightRange) * 100;
     }
     
-    // Calculate position alngg route based on adjusted percentage
+    // Calculate position along route based on adjusted percentage
     const totalSegments = waypoints.length - 1;
     const segmentPercentage = (adjustedPercentage * totalSegments) / 100;
     const currentSegment = Math.floor(segmentPercentage);
@@ -279,16 +318,16 @@ const FlightCalculator: React.FC = () => {
     // Get the position
     let position;
     if (adjustedPercentage >= 100) {
-      position = [waypoints[totalSegments].lat, waypoints[totalSegments].lng] as [number, number];
+      position = [waypoints[totalSegments].lat, waypoints[totalSegments].lon] as [number, number];
     } else if (adjustedPercentage <= 0) {
-      position = [waypoints[0].lat, waypoints[0].lng] as [number, number];
+      position = [waypoints[0].lat, waypoints[0].lon] as [number, number];
     } else {
       const start = waypoints[currentSegment];
       const end = waypoints[currentSegment + 1];
       
       const lat = start.lat + (end.lat - start.lat) * segmentProgress;
-      const lng = start.lng + (end.lng - start.lng) * segmentProgress;
-      position = [lat, lng] as [number, number];
+      const lon = start.lon + (end.lon - start.lon) * segmentProgress;
+      position = [lat, lon] as [number, number];
     }
     
     // Calculate current time based on original percentage (including taxi time)
@@ -315,7 +354,9 @@ const FlightCalculator: React.FC = () => {
     const positions: CachedRoutePosition[] = [];
     // Create more granular positions for smoother slider
     const INTERVAL = 5 * 60 * 1000; // 5 minutes in milliseconds (more granular)
-    const { hours, minutes } = parseDuration(plan.duration);
+    const [hours, minutes] = plan.duration.split('h ').map(part => 
+      parseInt(part.replace('m', ''))
+    );
     
     const totalDurationMs = (hours * 3600000) + (minutes * 60000) + (20 * 60 * 1000); // Including taxi time
     const steps = Math.ceil(totalDurationMs / INTERVAL);
@@ -367,23 +408,15 @@ const FlightCalculator: React.FC = () => {
   useEffect(() => {
     if (flightPlans.length > 0 && departureTime && arrivalTime) {
       const plan = flightPlans[0];
-      const depAirport = getAirportTimezone(plan.fromICAO);
-      const arrAirport = getAirportTimezone(plan.toICAO);
       plan.duration = calculateDuration(
         departureTime,
         arrivalTime,
-        depAirport,
-        arrAirport
+        plan.fromICAO,
+        plan.toICAO
       );
       calculateRoutePositions(plan, departureTime);
     }
-  }, [departureTime, arrivalTime, flightPlans, getAirportTimezone, calculateRoutePositions]);
-
-  const renderUTCTime = useCallback((time: Date, airport: string): string => {
-    const depAirport = getAirportTimezone(airport);
-    if (!depAirport) return time.toLocaleString();
-    return formatDateTime(convertToUTC(time, depAirport), false);
-  }, [getAirportTimezone]);
+  }, [departureTime, arrivalTime, flightPlans, calculateDuration, calculateRoutePositions]);
 
   return (
     <div className={`${isDarkMode ? 'bg-gray-900' : 'bg-gray-100'} p-4 overflow-hidden`}>
@@ -486,25 +519,35 @@ const FlightCalculator: React.FC = () => {
               >
                 <TileLayer
                   attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                  url={getTileLayerUrl(isDarkMode)}
+                  url={isDarkMode 
+                    ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                    : "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  }
                 />
                 <DayNightTerminator currentTime={routeProgress?.currentTime} />
                 {flightPlans.map((plan) => (
                   <React.Fragment key={plan.id}>
                     <Polyline
-                      positions={plan.route.nodes.map(w => [w.lat, w.lng])}
+                      positions={plan.route.nodes.map(w => [w.lat, w.lon])}
                       color={isDarkMode ? "white" : "black"}
                     />
                     {routeProgress && (
                       <Marker
                         position={routeProgress.position}
-                        icon={createPlaneIcon((() => {
-                          const currentIdx = Math.floor((routeProgress.percentage * (plan.route.nodes.length - 1)) / 100);
-                          const nextIdx = Math.min(currentIdx + 1, plan.route.nodes.length - 1);
-                          const start: [number, number] = [plan.route.nodes[currentIdx].lat, plan.route.nodes[currentIdx].lng];
-                          const end: [number, number] = [plan.route.nodes[nextIdx].lat, plan.route.nodes[nextIdx].lng];
-                          return calculateBearing(start, end);
-                        })())}
+                        icon={L.divIcon({
+                          html: `<div style="transform: rotate(${(() => {
+                            const currentIdx = Math.floor((routeProgress.percentage * (plan.route.nodes.length - 1)) / 100);
+                            const nextIdx = Math.min(currentIdx + 1, plan.route.nodes.length - 1);
+                            const start: [number, number] = [plan.route.nodes[currentIdx].lat, plan.route.nodes[currentIdx].lon];
+                            const end: [number, number] = [plan.route.nodes[nextIdx].lat, plan.route.nodes[nextIdx].lon];
+                            return calculateBearing(start, end);
+                          })()}deg)">
+                            <img src="${planeIcon}" alt="plane" style="width: 24px; height: 24px;" />
+                          </div>`,
+                          className: '',
+                          iconSize: [24, 24],
+                          iconAnchor: [12, 12]
+                        })}
                       />
                     )}
                     {plan.route.nodes.length > 0 && (
@@ -544,13 +587,13 @@ const FlightCalculator: React.FC = () => {
                           </div>
                           {departureTime && (
                             <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                              Departure: {formatDateTime(new Date(departureTime), false)} - 
+                              Departure: {new Date(departureTime).toLocaleString()} - 
                               {getAirportTimezone(plan.fromICAO)?.timezone}
                             </div>
                           )}
                           {arrivalTime && (
                             <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                              Arrival: {formatDateTime(new Date(arrivalTime), false)} - 
+                              Arrival: {new Date(arrivalTime).toLocaleString()} - 
                               {getAirportTimezone(plan.toICAO)?.timezone}
                             </div>
                           )}
@@ -613,7 +656,13 @@ const FlightCalculator: React.FC = () => {
                           <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'} mt-4`}>
                             Current Position: {routeProgress.position[0].toFixed(2)}, {routeProgress.position[1].toFixed(2)}
                             <br />
-                            Current Time (UTC): {renderUTCTime(routeProgress.currentTime, flightPlans[0]?.fromICAO || '')}
+                            Current Time (UTC): {(() => {
+                              const depAirport = getAirportTimezone(flightPlans[0]?.fromICAO || '');
+                              if (!depAirport) return routeProgress.currentTime.toLocaleString();
+                              const utcTime = new Date(routeProgress.currentTime.getTime() - 
+                              ((depAirport.offset.gmt + depAirport.offset.dst) * 3600000));
+                              return utcTime.toLocaleString() + ' UTC';
+                            })()}
                           </div>
                         )}
                       </div>
