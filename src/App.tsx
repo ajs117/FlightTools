@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import FlightCalculator from './components/FlightCalculator';
 import { FlightTracker } from './components/FlightTracker';
 import { FlightPlanDrawer } from './components/FlightPlanDrawer';
+import InFlightTracker from './components/InFlightTracker';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 
 const AppContent: React.FC = () => {
@@ -59,6 +60,20 @@ const AppContent: React.FC = () => {
               >
                 Flight Plan Drawer
               </button>
+              <button
+                onClick={() => setActiveTab('inflight')}
+                className={`px-4 py-2 rounded-md ${
+                  activeTab === 'inflight'
+                    ? isDarkMode 
+                      ? 'bg-blue-500 text-white' 
+                      : 'bg-blue-600 text-white'
+                    : isDarkMode
+                      ? 'text-gray-300 hover:bg-gray-700'
+                      : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                In-Flight Tracker
+              </button>
               <div className="ml-auto">
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
@@ -88,6 +103,7 @@ const AppContent: React.FC = () => {
         {activeTab === 'calculator' && <FlightCalculator />}
         {activeTab === 'tracker' && <FlightTracker />}
         {activeTab === 'drawer' && <FlightPlanDrawer />}
+        {activeTab === 'inflight' && <InFlightTracker />}
       </div>
     </div>
   );
