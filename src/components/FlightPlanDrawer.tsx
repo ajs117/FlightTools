@@ -3,6 +3,8 @@ import { MapContainer, TileLayer, Polyline, Marker, useMapEvents } from 'react-l
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { useTheme } from '../context/ThemeContext';
+import { initializeLeaflet, getTileLayerUrl } from '../utils/leafletHelpers';
+import { Waypoint } from '../utils/geo';
 
 // Fix for default markers
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -12,12 +14,8 @@ L.Icon.Default.mergeOptions({
   shadowUrl: require('leaflet/dist/images/marker-shadow.png'),
 });
 
-interface Waypoint {
-  lat: number;
-  lng: number;
-  name?: string;
-  type?: 'airport' | 'waypoint';
-}
+// Initialize Leaflet once
+initializeLeaflet();
 
 // Component to handle map click events
 const MapClickHandler: React.FC<{
@@ -43,7 +41,7 @@ export const FlightPlanDrawer: React.FC = () => {
   const [waypointType, setWaypointType] = useState<'airport' | 'waypoint'>('waypoint');
 
   // Generate MSFS .pln file content
-  const generatePlnContent = () => {
+  const generatePlnContent = (waypoints: Waypoint[]): string => {
     const header = `<?xml version="1.0" encoding="UTF-8"?>
 <SimBase.Document Type="AceXML" version="1,0" id="flight-plan">
   <Descr>AceXML FlightPlan</Descr>
@@ -83,7 +81,7 @@ export const FlightPlanDrawer: React.FC = () => {
 
     const newWaypoint: Waypoint = {
       lat,
-      lng,
+      lng: lng,
       name: `WP${waypoints.length + 1}`,
       type: waypointType
     };
@@ -93,7 +91,7 @@ export const FlightPlanDrawer: React.FC = () => {
 
   // Export to .pln file
   const exportToPln = () => {
-    const content = generatePlnContent();
+    const content = generatePlnContent(waypoints);
     const blob = new Blob([content], { type: 'application/xml' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -165,10 +163,7 @@ export const FlightPlanDrawer: React.FC = () => {
               >
                 <TileLayer
                   attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                  url={isDarkMode 
-                    ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-                    : "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                  }
+                  url={getTileLayerUrl(isDarkMode)}
                 />
                 <MapClickHandler onMapClick={handleMapClick} isDrawingEnabled={isDrawingEnabled} />
                 {waypoints.map((wp, index) => (
