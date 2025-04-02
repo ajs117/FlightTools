@@ -34,7 +34,7 @@ const MapClickHandler: React.FC<{
   return null;
 };
 
-export const FlightPlanDrawer: React.FC = () => {
+const FlightPlanDrawer: React.FC = () => {
   const { isDarkMode } = useTheme();
   const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
   const [isDrawingEnabled, setIsDrawingEnabled] = useState(true);
@@ -261,4 +261,6 @@ export const FlightPlanDrawer: React.FC = () => {
       </div>
     </div>
   );
-}; 
+};
+
+export default FlightPlanDrawer; 

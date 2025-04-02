@@ -127,7 +127,7 @@ const MapUpdater = ({ center }: { center: [number, number] }) => {
   return null;
 };
 
-export const FlightTracker: React.FC = () => {
+const FlightTracker: React.FC = () => {
   const { isDarkMode } = useTheme();
   const [location, setLocation] = useState<Location | null>(() => {
     const savedLocation = localStorage.getItem('lastLocation');
@@ -804,4 +804,6 @@ export const FlightTracker: React.FC = () => {
       </div>
     </div>
   );
-}; 
+};
+
+export default FlightTracker; 
