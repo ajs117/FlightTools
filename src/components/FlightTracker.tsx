@@ -159,6 +159,7 @@ const FlightTracker: React.FC = () => {
     return cachedPosition ? JSON.parse(cachedPosition) : null;
   });
   const [trackingInterval, setTrackingInterval] = useState<NodeJS.Timeout | null>(null);
+  const [autoRefreshInterval, setAutoRefreshInterval] = useState<NodeJS.Timeout | null>(null);
   const [interpolationInterval, setInterpolationInterval] = useState<NodeJS.Timeout | null>(null);
   const [distanceUpdateInterval, setDistanceUpdateInterval] = useState<NodeJS.Timeout | null>(null);
   const [distanceInterpolationInterval, setDistanceInterpolationInterval] = useState<NodeJS.Timeout | null>(null);
@@ -226,6 +227,9 @@ const FlightTracker: React.FC = () => {
       if (trackingInterval) {
         clearInterval(trackingInterval);
       }
+      if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+      }
       if (interpolationInterval) {
         clearInterval(interpolationInterval);
       }
@@ -236,7 +240,7 @@ const FlightTracker: React.FC = () => {
         clearInterval(distanceInterpolationInterval);
       }
     };
-  }, [trackingInterval, interpolationInterval, distanceUpdateInterval, distanceInterpolationInterval]);
+  }, [trackingInterval, autoRefreshInterval, interpolationInterval, distanceUpdateInterval, distanceInterpolationInterval]);
 
   // Update distance when location or aircraft position changes
   useEffect(() => {
@@ -477,8 +481,13 @@ const FlightTracker: React.FC = () => {
         }
       }
 
+      // OpenSky Network API uses ICAO24 addresses or callsigns
+      // Since users input IATA codes, we'll search by callsign which is often similar
+      // This is not a perfect solution but helps with basic tracking
+      const callsign = flightNumber.padEnd(8, ' '); // OpenSky uses fixed-length callsigns
+
       const response = await fetch(
-        `https://api.aviationstack.com/v1/flights?access_key=0568428049f1cef2ccb5aef37792e31f&flight_iata=${flightNumber}`
+        `https://opensky-network.org/api/states/all?time=0&icao24=&callback=`
       );
 
       if (!response.ok) {
@@ -486,14 +495,64 @@ const FlightTracker: React.FC = () => {
       }
 
       const data = await response.json();
-      if (!data.data || data.data.length === 0) {
+      
+      if (!data.states || data.states.length === 0) {
         throw new Error('No flight data found');
       }
-
-      const flight = data.data[0];
-      if (!flight.live) {
-        throw new Error('No live data available for this flight');
+      
+      // Find flight by matching callsign (not perfect but works for many flights)
+      // OpenSky data format: [icao24, callsign, origin_country, time_position, time_velocity, longitude, latitude, altitude, on_ground, velocity, heading, vertical_rate, sensors, baro_altitude, squawk, spi, position_source]
+      const flightState = data.states.find((state: any[]) => 
+        state[1] && state[1].trim().includes(flightNumber.toUpperCase())
+      );
+      
+      if (!flightState) {
+        throw new Error('Flight not found in tracking data');
       }
+      
+      // Extract information from the OpenSky state array
+      const icao24 = flightState[0];
+      const callsignFromApi = flightState[1]?.trim();
+      const country = flightState[2];
+      const longitude = flightState[5];
+      const latitude = flightState[6]; 
+      const altitude = flightState[7];
+      const isOnGround = flightState[8];
+      const velocity = flightState[9]; // m/s
+      const heading = flightState[10];
+      const verticalRate = flightState[11];
+      
+      // Convert velocity from m/s to km/h
+      const speedKmh = velocity ? velocity * 3.6 : 0;
+      
+      // Create our flight data object
+      const flight: FlightData = {
+        flight: {
+          number: flightNumber,
+          iata: flightNumber
+        },
+        departure: {
+          airport: 'N/A', // OpenSky doesn't provide this information
+          timezone: ''
+        },
+        arrival: {
+          airport: 'N/A', // OpenSky doesn't provide this information  
+          timezone: ''
+        },
+        airline: {
+          name: callsignFromApi || flightNumber // Use callsign as airline+flight if available
+        },
+        live: {
+          latitude: latitude,
+          longitude: longitude,
+          altitude: altitude || 0,
+          direction: heading || 0,
+          speed_horizontal: speedKmh,
+          speed_vertical: verticalRate || 0,
+          is_ground: Boolean(isOnGround),
+          updated: new Date().toISOString()
+        }
+      };
 
       // Cache the new data
       const newCache: CachedFlightData = {
@@ -503,6 +562,15 @@ const FlightTracker: React.FC = () => {
       setCachedFlightData(newCache);
       setLastApiCall(newCache.timestamp);
       sessionStorage.setItem('lastApiCall', newCache.timestamp.toString());
+
+      // Setup automatic refresh if not already set
+      if (!autoRefreshInterval && flightNumber) {
+        const refreshIntervalId = setInterval(() => {
+          console.log('Auto refreshing flight data from API');
+          trackFlight(true);
+        }, 60000); // Refresh every 60 seconds
+        setAutoRefreshInterval(refreshIntervalId);
+      }
 
       setFlightData(flight);
       setLastKnownPosition({
@@ -534,6 +602,10 @@ const FlightTracker: React.FC = () => {
     if (trackingInterval) {
       clearInterval(trackingInterval);
       setTrackingInterval(null);
+    }
+    if (autoRefreshInterval) {
+      clearInterval(autoRefreshInterval);
+      setAutoRefreshInterval(null);
     }
     if (interpolationInterval) {
       clearInterval(interpolationInterval);
@@ -676,7 +748,7 @@ const FlightTracker: React.FC = () => {
             }`}>
               <div className="flex justify-between items-center mb-3">
                 <div className="font-medium text-lg">
-                  {flightData.airline.name} {flightData.flight.number}
+                 {flightData.flight.number}
                 </div>
               </div>
               {displayedDistance !== null && (
@@ -693,25 +765,6 @@ const FlightTracker: React.FC = () => {
               )}
 
               <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <div className={`text-sm font-medium text-center ${
-                      isDarkMode ? 'text-blue-200' : 'text-blue-800'
-                    }`}>
-                      From
-                    </div>
-                    <div className="text-base text-center">{flightData.departure.airport}</div>
-                  </div>
-                  <div>
-                    <div className={`text-sm font-medium text-center ${
-                      isDarkMode ? 'text-blue-200' : 'text-blue-800'
-                    }`}>
-                      To
-                    </div>
-                    <div className="text-base text-center">{flightData.arrival.airport}</div>
-                  </div>
-                </div>
-
                 {flightData.live && (
                   <div className="grid grid-cols-2 gap-4 mt-2">
                     <div>
@@ -754,6 +807,8 @@ const FlightTracker: React.FC = () => {
                     isDarkMode ? 'text-blue-300' : 'text-blue-600'
                   }`}>
                     Using API data from {sessionStorage.getItem('lastApiCall') ? new Date(parseInt(sessionStorage.getItem('lastApiCall')!)).toLocaleString() : "N/A"}
+                    <br />
+                    <span className="italic">Auto-refreshes every minute</span>
                   </div>
                 )}
               </div>
