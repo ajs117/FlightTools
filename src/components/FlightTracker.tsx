@@ -447,6 +447,34 @@ const FlightTracker: React.FC = () => {
     };
   }, [flightData, lastKnownPosition, interpolationInterval, updateInterpolatedPosition]);
 
+  // Set up auto-refresh interval for API data
+  useEffect(() => {
+    // Clear any existing auto-refresh interval
+    if (autoRefreshInterval) {
+      clearInterval(autoRefreshInterval);
+      setAutoRefreshInterval(null);
+    }
+
+    // If we have flight data and a flight number, set up auto-refresh
+    if (flightData && flightNumber) {
+      console.log('Setting up auto-refresh interval for flight data');
+      const refreshInterval = setInterval(() => {
+        console.log('Auto-refreshing flight data from API');
+        trackFlight(true); // Force refresh from API
+      }, 60000); // Refresh every 60 seconds (1 minute)
+      
+      setAutoRefreshInterval(refreshInterval);
+    }
+
+    // Clean up on unmount or when dependencies change
+    return () => {
+      if (autoRefreshInterval) {
+        console.log('Clearing auto-refresh interval');
+        clearInterval(autoRefreshInterval);
+      }
+    };
+  }, [flightData, flightNumber]);
+
   // Track flight
   const trackFlight = async (forceRefresh: boolean = false) => {
     if (!flightNumber.trim()) {
@@ -562,15 +590,6 @@ const FlightTracker: React.FC = () => {
       setCachedFlightData(newCache);
       setLastApiCall(newCache.timestamp);
       sessionStorage.setItem('lastApiCall', newCache.timestamp.toString());
-
-      // Setup automatic refresh if not already set
-      if (!autoRefreshInterval && flightNumber) {
-        const refreshIntervalId = setInterval(() => {
-          console.log('Auto refreshing flight data from API');
-          trackFlight(true);
-        }, 60000); // Refresh every 60 seconds
-        setAutoRefreshInterval(refreshIntervalId);
-      }
 
       setFlightData(flight);
       setLastKnownPosition({
