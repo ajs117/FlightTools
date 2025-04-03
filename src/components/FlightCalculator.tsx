@@ -156,16 +156,27 @@ const calculateBearing = (start: [number, number], end: [number, number]): numbe
 
 const FlightCalculator: React.FC = () => {
   const { isDarkMode } = useTheme();
-  const [departure, setDeparture] = useState('EGBB');
-  const [arrival, setArrival] = useState('EDDF');
+  const [departure, setDeparture] = useState('');
+  const [arrival, setArrival] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [flightPlans, setFlightPlans] = useState<FlightPlan[]>([]);
-  const [departureTime, setDepartureTime] = useState('2024-12-27T17:45');
-  const [arrivalTime, setArrivalTime] = useState('2024-12-27T20:20');
+  const [departureTime, setDepartureTime] = useState('');
+  const [arrivalTime, setArrivalTime] = useState('');
   const [routeProgress, setRouteProgress] = useState<RouteProgress | null>(null);
   const [sliderValue, setSliderValue] = useState<number>(0);
   const [cachedPositions, setCachedPositions] = useState<CachedRoutePosition[]>([]);
+
+  // Handle departure time changes
+  const handleDepartureTimeChange = (time: string) => {
+    setDepartureTime(time);
+    // If arrival time is before departure time or not set, update it
+    if (!arrivalTime || new Date(arrivalTime) <= new Date(time)) {
+      const newArrivalTime = new Date(time);
+      newArrivalTime.setHours(newArrivalTime.getHours() + 1); // Add 1 hour by default
+      setArrivalTime(newArrivalTime.toISOString().slice(0, 16));
+    }
+  };
 
   const getAirportTimezone = useCallback((icao: string): AirportTimezone | null => {
     try {
@@ -445,7 +456,7 @@ const FlightCalculator: React.FC = () => {
               <input
                 type="datetime-local"
                 value={departureTime}
-                onChange={(e) => setDepartureTime(e.target.value)}
+                onChange={(e) => handleDepartureTimeChange(e.target.value)}
                 className={`w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                   isDarkMode ? 'bg-gray-700 text-white border-gray-600' : 'bg-white text-gray-900'
                 }`}
@@ -524,7 +535,7 @@ const FlightCalculator: React.FC = () => {
                     : "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                   }
                 />
-                <DayNightTerminator currentTime={routeProgress?.currentTime} />
+                <DayNightTerminator currentTime={routeProgress?.currentTime ? new Date(routeProgress.currentTime.getTime() + routeProgress.currentTime.getTimezoneOffset() * 60000) : undefined} />
                 {flightPlans.map((plan) => (
                   <React.Fragment key={plan.id}>
                     <Polyline
