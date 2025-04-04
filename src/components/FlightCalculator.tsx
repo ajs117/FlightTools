@@ -156,16 +156,57 @@ const calculateBearing = (start: [number, number], end: [number, number]): numbe
 
 const FlightCalculator: React.FC = () => {
   const { isDarkMode } = useTheme();
-  const [departure, setDeparture] = useState('');
-  const [arrival, setArrival] = useState('');
+  const [departure, setDeparture] = useState(() => {
+    return localStorage.getItem('calcDeparture') || '';
+  });
+  const [arrival, setArrival] = useState(() => {
+    return localStorage.getItem('calcArrival') || '';
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [flightPlans, setFlightPlans] = useState<FlightPlan[]>([]);
-  const [departureTime, setDepartureTime] = useState('');
-  const [arrivalTime, setArrivalTime] = useState('');
+  const [departureTime, setDepartureTime] = useState(() => {
+    return localStorage.getItem('calcDepartureTime') || '';
+  });
+  const [arrivalTime, setArrivalTime] = useState(() => {
+    return localStorage.getItem('calcArrivalTime') || '';
+  });
   const [routeProgress, setRouteProgress] = useState<RouteProgress | null>(null);
   const [sliderValue, setSliderValue] = useState<number>(0);
   const [cachedPositions, setCachedPositions] = useState<CachedRoutePosition[]>([]);
+
+  // Save values to localStorage when they change
+  useEffect(() => {
+    if (departure) {
+      localStorage.setItem('calcDeparture', departure);
+    } else {
+      localStorage.removeItem('calcDeparture');
+    }
+  }, [departure]);
+
+  useEffect(() => {
+    if (arrival) {
+      localStorage.setItem('calcArrival', arrival);
+    } else {
+      localStorage.removeItem('calcArrival');
+    }
+  }, [arrival]);
+
+  useEffect(() => {
+    if (departureTime) {
+      localStorage.setItem('calcDepartureTime', departureTime);
+    } else {
+      localStorage.removeItem('calcDepartureTime');
+    }
+  }, [departureTime]);
+
+  useEffect(() => {
+    if (arrivalTime) {
+      localStorage.setItem('calcArrivalTime', arrivalTime);
+    } else {
+      localStorage.removeItem('calcArrivalTime');
+    }
+  }, [arrivalTime]);
 
   // Handle departure time changes
   const handleDepartureTimeChange = (time: string) => {
@@ -415,6 +456,26 @@ const FlightCalculator: React.FC = () => {
     }
   }, [cachedPositions]);
 
+  // Clear stored fields
+  const clearStoredFields = () => {
+    // Clear state
+    setDeparture('');
+    setArrival('');
+    setDepartureTime('');
+    setArrivalTime('');
+    setFlightPlans([]);
+    setRouteProgress(null);
+    setSliderValue(0);
+    setCachedPositions([]);
+    setError('');
+    
+    // Clear localStorage
+    localStorage.removeItem('calcDeparture');
+    localStorage.removeItem('calcArrival');
+    localStorage.removeItem('calcDepartureTime');
+    localStorage.removeItem('calcArrivalTime');
+  };
+
   // When departure or arrival time changes, recalculate
   useEffect(() => {
     if (flightPlans.length > 0 && departureTime && arrivalTime) {
@@ -505,6 +566,13 @@ const FlightCalculator: React.FC = () => {
                   Search Flight Plans
                 </>
               )}
+            </button>
+            
+            <button
+              onClick={clearStoredFields}
+              className="w-full bg-red-600 text-white p-2 sm:p-3 rounded hover:bg-red-700 flex items-center justify-center gap-2 text-sm sm:text-base"
+            >
+              Clear All Fields
             </button>
           </div>
 
