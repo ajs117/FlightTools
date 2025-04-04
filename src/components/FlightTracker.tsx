@@ -147,9 +147,15 @@ const FlightTracker: React.FC = () => {
   const [distance, setDistance] = useState<number | null>(null);
   const [displayedDistance, setDisplayedDistance] = useState<number | null>(null);
   const [error, setError] = useState<string>('');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(() => {
+    const saved = localStorage.getItem('lastSearchQuery');
+    return saved || '';
+  });
   const [loading, setLoading] = useState(false);
-  const [flightNumber, setFlightNumber] = useState('');
+  const [flightNumber, setFlightNumber] = useState(() => {
+    const saved = localStorage.getItem('lastFlightNumber');
+    return saved || '';
+  });
   const [flightData, setFlightData] = useState<FlightData | null>(null);
   const [lastKnownPosition, setLastKnownPosition] = useState<InterpolatedPosition | null>(null);
   const [trackingInterval, setTrackingInterval] = useState<NodeJS.Timeout | null>(null);
@@ -159,6 +165,45 @@ const FlightTracker: React.FC = () => {
   const [distanceInterpolationInterval, setDistanceInterpolationInterval] = useState<NodeJS.Timeout | null>(null);
   const [lastDrawTime, setLastDrawTime] = useState<Date | null>(null);
   const [lastApiCall, setLastApiCall] = useState<number | null>(null);
+
+  // Auto-track flight and use saved location on mount
+  useEffect(() => {
+    // Load saved location if it exists
+    const savedLocation = localStorage.getItem('lastLocation');
+    if (savedLocation) {
+      try {
+        const parsedLocation = JSON.parse(savedLocation);
+        setLocation(parsedLocation);
+      } catch (e) {
+        console.error('Error parsing saved location:', e);
+      }
+    }
+
+    // Auto-track flight if flight number exists
+    const savedFlightNumber = localStorage.getItem('lastFlightNumber');
+    if (savedFlightNumber) {
+      setFlightNumber(savedFlightNumber);
+      trackFlight();
+    }
+  }, []); // Empty dependency array means this runs once on mount
+
+  // Save search query to localStorage whenever it changes
+  useEffect(() => {
+    if (searchQuery) {
+      localStorage.setItem('lastSearchQuery', searchQuery);
+    } else {
+      localStorage.removeItem('lastSearchQuery');
+    }
+  }, [searchQuery]);
+
+  // Save flight number to localStorage whenever it changes
+  useEffect(() => {
+    if (flightNumber) {
+      localStorage.setItem('lastFlightNumber', flightNumber);
+    } else {
+      localStorage.removeItem('lastFlightNumber');
+    }
+  }, [flightNumber]);
 
   // Save location to localStorage whenever it changes
   useEffect(() => {
@@ -419,6 +464,8 @@ const FlightTracker: React.FC = () => {
     
     // Clear storage
     sessionStorage.removeItem('lastApiCall');
+    localStorage.removeItem('lastSearchQuery');
+    localStorage.removeItem('lastFlightNumber');
   }, []);
 
   // Track flight
@@ -628,7 +675,10 @@ const FlightTracker: React.FC = () => {
     // Reset all tracking state
     resetAllTrackingState();
     
+    // Clear localStorage
     localStorage.removeItem('lastLocation');
+    localStorage.removeItem('lastSearchQuery');
+    localStorage.removeItem('lastFlightNumber');
   };
 
   // Force refresh flight data from API
@@ -895,7 +945,7 @@ const FlightTracker: React.FC = () => {
                   }`}>
                     Using API data from {new Date(lastApiCall).toLocaleString()}
                     <br />
-                    <span className="italic">Auto-refreshes every minute</span>
+                    <span className="italic">Auto-refreshes every minute, this use a lot of data so recommend using this feature with wifi only</span>
                   </div>
                 )}
               </div>
@@ -919,7 +969,7 @@ const FlightTracker: React.FC = () => {
               }`}>
                 Using API data from {lastApiCall ? new Date(lastApiCall).toLocaleString() : "N/A"}
                 <br />
-                <span className="italic">Auto-refreshes every minute</span>
+                <span className="italic">Auto-refreshes every minute, this use a lot of data so recommend using this feature with wifi only</span>
               </div>
             </div>
           )}
