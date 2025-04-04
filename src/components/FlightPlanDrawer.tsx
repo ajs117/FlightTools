@@ -118,13 +118,13 @@ const FlightPlanDrawer: React.FC = () => {
   };
 
   return (
-    <div className={`min-h-screen ${isDarkMode ? 'bg-gray-900' : 'bg-gray-100'} p-4`}>
-      <div className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow p-6 max-w-7xl mx-auto`}>
-        <div className="mb-4 space-y-4">
-          <div className="flex flex-wrap gap-4">
+    <div className={`${isDarkMode ? 'bg-gray-900' : 'bg-gray-100'} p-2 sm:p-4`}>
+      <div className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow p-3 sm:p-6 max-w-7xl mx-auto`}>
+        <div className="space-y-3 sm:space-y-4">
+          <div className="flex flex-wrap gap-2 sm:gap-4">
             <button
               onClick={() => setIsDrawingEnabled(!isDrawingEnabled)}
-              className={`px-4 py-2 rounded ${
+              className={`px-2 py-1 sm:px-4 sm:py-2 text-xs sm:text-sm rounded ${
                 isDrawingEnabled
                   ? 'bg-green-600 hover:bg-green-700'
                   : 'bg-gray-600 hover:bg-gray-700'
@@ -134,27 +134,27 @@ const FlightPlanDrawer: React.FC = () => {
             </button>
             <button
               onClick={() => setWaypointType(waypointType === 'airport' ? 'waypoint' : 'airport')}
-              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+              className="px-2 py-1 sm:px-4 sm:py-2 text-xs sm:text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
             >
               {waypointType === 'airport' ? 'Airport Mode' : 'Waypoint Mode'}
             </button>
             <button
               onClick={exportToPln}
               disabled={waypoints.length < 2}
-              className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-purple-300"
+              className="px-2 py-1 sm:px-4 sm:py-2 text-xs sm:text-sm bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-purple-300"
             >
               Export to MSFS
             </button>
             <button
               onClick={() => setWaypoints([])}
-              className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+              className="px-2 py-1 sm:px-4 sm:py-2 text-xs sm:text-sm bg-red-600 text-white rounded hover:bg-red-700"
             >
               Clear All
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className={`h-[400px] rounded border ${
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+            <div className={`h-[300px] sm:h-[400px] rounded border ${
               isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'
             }`}>
               <MapContainer
@@ -190,28 +190,28 @@ const FlightPlanDrawer: React.FC = () => {
               </MapContainer>
             </div>
 
-            <div className={`p-4 rounded ${
+            <div className={`p-3 sm:p-4 rounded ${
               isDarkMode ? 'bg-gray-700' : 'bg-gray-50'
             }`}>
-              <h3 className={`text-lg font-semibold mb-4 ${
+              <h3 className={`text-base sm:text-lg font-semibold mb-2 sm:mb-4 ${
                 isDarkMode ? 'text-white' : 'text-gray-900'
               }`}>
                 Waypoints
               </h3>
-              <div className="space-y-2">
+              <div className="space-y-1 sm:space-y-2 max-h-[250px] sm:max-h-[300px] overflow-y-auto text-sm">
                 {waypoints.map((wp, index) => (
                   <div
                     key={index}
-                    className={`p-2 rounded flex items-center gap-2 ${
+                    className={`p-1 sm:p-2 rounded flex items-center gap-2 ${
                       isDarkMode ? 'bg-gray-600' : 'bg-white'
                     }`}
                   >
-                    <span className={`font-mono ${
+                    <span className={`font-mono text-xs sm:text-sm ${
                       isDarkMode ? 'text-blue-300' : 'text-blue-600'
                     }`}>
                       {wp.name}
                     </span>
-                    <span className={`text-sm ${
+                    <span className={`text-xs sm:text-sm ${
                       isDarkMode ? 'text-gray-300' : 'text-gray-600'
                     }`}>
                       ({wp.lat.toFixed(4)}, {wp.lng.toFixed(4)})
@@ -227,10 +227,10 @@ const FlightPlanDrawer: React.FC = () => {
               </div>
 
               {selectedWaypoint && (
-                <div className={`mt-4 p-4 rounded ${
+                <div className={`mt-3 sm:mt-4 p-2 sm:p-4 rounded ${
                   isDarkMode ? 'bg-gray-600' : 'bg-white'
                 }`}>
-                  <h4 className={`font-semibold mb-2 ${
+                  <h4 className={`text-sm sm:text-base font-semibold mb-1 sm:mb-2 ${
                     isDarkMode ? 'text-white' : 'text-gray-900'
                   }`}>
                     Edit Waypoint
@@ -240,7 +240,7 @@ const FlightPlanDrawer: React.FC = () => {
                     value={waypointName}
                     onChange={(e) => setWaypointName(e.target.value)}
                     placeholder="Waypoint name"
-                    className={`w-full p-2 mb-2 rounded ${
+                    className={`w-full p-1 sm:p-2 mb-1 sm:mb-2 rounded text-sm ${
                       isDarkMode ? 'bg-gray-700 text-white border-gray-600' : 'bg-white text-gray-900'
                     }`}
                   />
@@ -249,7 +249,7 @@ const FlightPlanDrawer: React.FC = () => {
                       updateWaypointName(waypoints.indexOf(selectedWaypoint), waypointName);
                       setSelectedWaypoint(null);
                     }}
-                    className="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                    className="w-full px-2 py-1 sm:px-4 sm:py-2 text-xs sm:text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
                   >
                     Update Name
                   </button>

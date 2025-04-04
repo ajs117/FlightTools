@@ -430,13 +430,13 @@ const FlightCalculator: React.FC = () => {
   }, [departureTime, arrivalTime, flightPlans, calculateDuration, calculateRoutePositions]);
 
   return (
-    <div className={`${isDarkMode ? 'bg-gray-900' : 'bg-gray-100'} p-4 overflow-hidden`}>
-      <div className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow p-6 h-full mx-auto`}>
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 h-full">
+    <div className={`${isDarkMode ? 'bg-gray-900' : 'bg-gray-100'} p-2 sm:p-4 overflow-hidden`}>
+      <div className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow p-3 sm:p-6 h-full mx-auto`}>
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 sm:gap-6 h-full">
           {/* Input section */}
-          <div className="lg:col-span-1 space-y-4">
+          <div className="lg:col-span-1 space-y-3 sm:space-y-4">
             <div>
-              <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-1`}>
+              <label className={`block text-xs sm:text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-1`}>
                 Departure (ICAO/Name)
               </label>
               <input
@@ -450,7 +450,7 @@ const FlightCalculator: React.FC = () => {
               />
             </div>
             <div>
-              <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-1`}>
+              <label className={`block text-xs sm:text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-1`}>
                 Departure Time
               </label>
               <input
@@ -463,7 +463,7 @@ const FlightCalculator: React.FC = () => {
               />
             </div>
             <div>
-              <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-1`}>
+              <label className={`block text-xs sm:text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-1`}>
                 Arrival (ICAO/Name)
               </label>
               <input
@@ -477,7 +477,7 @@ const FlightCalculator: React.FC = () => {
               />
             </div>
             <div>
-              <label className={`block text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-1`}>
+              <label className={`block text-xs sm:text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-1`}>
                 Arrival Time
               </label>
               <input
@@ -492,7 +492,7 @@ const FlightCalculator: React.FC = () => {
             <button
               onClick={searchFlightPlans}
               disabled={loading || !departure || !arrival}
-              className="w-full bg-blue-600 text-white p-3 rounded hover:bg-blue-700 disabled:bg-blue-300 flex items-center justify-center gap-2"
+              className="w-full bg-blue-600 text-white p-2 sm:p-3 rounded hover:bg-blue-700 disabled:bg-blue-300 flex items-center justify-center gap-2 text-sm sm:text-base"
             >
               {loading ? (
                 <>
@@ -509,9 +509,9 @@ const FlightCalculator: React.FC = () => {
           </div>
 
           {/* Map and details section */}
-          <div className="lg:col-span-3 space-y-4">
+          <div className="lg:col-span-3 space-y-3 sm:space-y-4">
             {error && (
-              <div className={`p-3 rounded ${
+              <div className={`p-2 sm:p-3 rounded text-sm sm:text-base ${
                 isDarkMode ? 'bg-red-900 text-red-100' : 'bg-red-100 text-red-700'
               }`}>
                 {error}
@@ -519,7 +519,7 @@ const FlightCalculator: React.FC = () => {
             )}
             
             {/* Map container */}
-            <div className={`h-[calc(100vh-300px)] rounded border ${
+            <div className={`h-[50vh] md:h-[calc(100vh-350px)] rounded border ${
               isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'
             }`}>
               <MapContainer
@@ -571,23 +571,23 @@ const FlightCalculator: React.FC = () => {
 
             {/* Flight plan details */}
             {flightPlans.length > 0 && (
-              <div className={`${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'} p-4 rounded border`}>
-                <h2 className={`text-xl font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+              <div className={`${isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'} p-3 sm:p-4 rounded border text-sm sm:text-base`}>
+                <h2 className={`text-lg sm:text-xl font-semibold mb-2 sm:mb-4 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
                   Flight Plan Details
                 </h2>
-                <div className="space-y-4">
+                <div className="space-y-3 sm:space-y-4">
                   {flightPlans.map((plan) => (
                     <div key={plan.id}>
-                      <div className="grid grid-cols-2 gap-4 mb-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4 mb-2 sm:mb-4">
                         <div>
                           <div className={`font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
                             {plan.fromICAO} → {plan.toICAO}
                           </div>
-                          <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                          <div className={`text-xs sm:text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                             {plan.fromName} → {plan.toName}
                           </div>
                           {plan.duration && (
-                            <div className="text-sm font-medium text-blue-400">
+                            <div className="text-xs sm:text-sm font-medium text-blue-400">
                               Duration: {plan.duration}
                             </div>
                           )}
@@ -597,13 +597,13 @@ const FlightCalculator: React.FC = () => {
                             {Math.round(plan.distance)} nm
                           </div>
                           {departureTime && (
-                            <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                            <div className={`text-xs sm:text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                               Departure: {new Date(departureTime).toLocaleString()} - 
                               {getAirportTimezone(plan.fromICAO)?.timezone}
                             </div>
                           )}
                           {arrivalTime && (
-                            <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                            <div className={`text-xs sm:text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                               Arrival: {new Date(arrivalTime).toLocaleString()} - 
                               {getAirportTimezone(plan.toICAO)?.timezone}
                             </div>
@@ -612,12 +612,12 @@ const FlightCalculator: React.FC = () => {
                       </div>
                       
                       <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                        <div className="flex items-center justify-between mb-1 sm:mb-2">
+                          <span className={`text-xs sm:text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                             {routeProgress?.currentTime.toLocaleTimeString() || 'Route Progress'}
                           </span>
                           {routeProgress && (
-                            <span className={`text-sm font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                            <span className={`text-xs sm:text-sm font-medium ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
                               {Math.round(routeProgress.percentage)}%
                             </span>
                           )}
@@ -656,7 +656,7 @@ const FlightCalculator: React.FC = () => {
                                 style={{ left: `${pos.percentage}%` }}
                               >
                                 |
-                                <span className="hidden group-hover:block absolute -translate-x-1/2 whitespace-nowrap">
+                                <span className="hidden group-hover:block absolute -translate-x-1/2 whitespace-nowrap text-[10px] sm:text-xs">
                                   {pos.timeString}
                                 </span>
                               </div>
@@ -664,7 +664,7 @@ const FlightCalculator: React.FC = () => {
                           </div>
                         </div>
                         {routeProgress && (
-                          <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'} mt-4`}>
+                          <div className={`text-xs sm:text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'} mt-2 sm:mt-4`}>
                             Current Position: {routeProgress.position[0].toFixed(2)}, {routeProgress.position[1].toFixed(2)}
                             <br />
                             Current Time (UTC): {(() => {

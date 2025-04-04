@@ -746,11 +746,11 @@ const FlightTracker: React.FC = () => {
   }, [flightData, flightNumber, trackingAllAircraft, getAllAircraft, trackFlight]);
 
   return (
-    <div className={`min-h-screen ${isDarkMode ? 'bg-gray-900' : 'bg-gray-100'} p-4`}>
-      <div className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow p-6 max-w-7xl mx-auto`}>
-        <div className="mb-4 space-y-4">
-          <div className="flex flex-wrap gap-4">
-            <div className="flex-1 min-w-[200px] flex gap-2">
+    <div className={`${isDarkMode ? 'bg-gray-900' : 'bg-gray-100'} p-2 sm:p-4`}>
+      <div className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow p-3 sm:p-6 max-w-7xl mx-auto`}>
+        <div className="mb-2 sm:mb-4 space-y-2 sm:space-y-4">
+          <div className="flex flex-col sm:flex-row flex-wrap gap-2 sm:gap-4">
+            <div className="w-full sm:flex-1 sm:min-w-[200px] flex gap-2">
               <input
                 type="text"
                 value={searchQuery}
@@ -758,7 +758,7 @@ const FlightTracker: React.FC = () => {
                 onKeyPress={(e) => e.key === 'Enter' && searchLocation()}
                 hidden={location !== null}
                 placeholder="Enter location (e.g., London, UK)"
-                className={`flex-1 p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                className={`flex-1 p-2 text-sm sm:text-base border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                   isDarkMode ? 'bg-gray-700 text-white border-gray-600' : 'bg-white text-gray-900'
                 }`}
               />
@@ -766,12 +766,12 @@ const FlightTracker: React.FC = () => {
                 onClick={searchLocation}
                 disabled={loading || !searchQuery.trim()}
                 hidden={location !== null}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-blue-300 whitespace-nowrap"
+                className="px-2 sm:px-4 py-1 sm:py-2 text-xs sm:text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-blue-300 whitespace-nowrap"
               >
                 Search
               </button>
             </div>
-            <div className="flex-1 min-w-[200px] flex gap-2">
+            <div className="w-full sm:flex-1 sm:min-w-[200px] flex gap-2">
               <input
                 type="text"
                 value={flightNumber}
@@ -779,25 +779,25 @@ const FlightTracker: React.FC = () => {
                 onKeyPress={(e) => e.key === 'Enter' && trackFlight()}
                 placeholder="Enter flight number (e.g., BA123)"
                 disabled={trackingAllAircraft}
-                className={`flex-1 p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                className={`flex-1 p-2 text-sm sm:text-base border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                   isDarkMode ? 'bg-gray-700 text-white border-gray-600' : 'bg-white text-gray-900'
                 } ${trackingAllAircraft ? 'opacity-50' : ''}`}
               />
               <button
                 onClick={(e) => trackFlight()}
                 disabled={loading || !flightNumber.trim() || trackingAllAircraft}
-                className={`px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-purple-300 whitespace-nowrap ${
+                className={`px-2 sm:px-4 py-1 sm:py-2 text-xs sm:text-sm bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-purple-300 whitespace-nowrap ${
                   trackingAllAircraft ? 'opacity-50' : ''
                 }`}
               >
-                Track Flight
+                Track
               </button>
               <button
                 onClick={(e) => getAllAircraft(false)}
                 disabled={loading || trackingAllAircraft}
-                className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-green-300 whitespace-nowrap"
+                className="px-2 sm:px-4 py-1 sm:py-2 text-xs sm:text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-green-300 whitespace-nowrap"
               >
-                Track All
+                All Aircraft
               </button>
             </div>
             <div className="flex gap-2">
@@ -805,15 +805,15 @@ const FlightTracker: React.FC = () => {
                 <button
                   onClick={clearLocation}
                   disabled={loading}
-                  className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:bg-red-300 whitespace-nowrap"
+                  className="px-2 sm:px-4 py-1 sm:py-2 text-xs sm:text-sm bg-red-600 text-white rounded hover:bg-red-700 disabled:bg-red-300 whitespace-nowrap"
                 >
-                  Clear All
+                  Clear
                 </button>
               )}
               {(flightData || trackingAllAircraft) && (
                 <button
                   onClick={handleRefreshClick}
-                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 whitespace-nowrap"
+                  className="px-2 sm:px-4 py-1 sm:py-2 text-xs sm:text-sm bg-blue-600 text-white rounded hover:bg-blue-700 whitespace-nowrap"
                 >
                   Refresh
                 </button>
@@ -822,7 +822,7 @@ const FlightTracker: React.FC = () => {
           </div>
 
           {error && (
-            <div className={`p-3 rounded ${
+            <div className={`p-2 sm:p-3 rounded text-xs sm:text-sm ${
               isDarkMode ? 'bg-red-900 text-red-100' : 'bg-red-100 text-red-700'
             }`}>
               {error}
@@ -830,67 +830,67 @@ const FlightTracker: React.FC = () => {
           )}
           
           {flightData && (
-            <div className={`p-4 rounded ${
+            <div className={`p-2 sm:p-4 rounded ${
               isDarkMode ? 'bg-blue-900 text-blue-100' : 'bg-blue-100 text-blue-700'
             }`}>
-              <div className="flex justify-between items-center mb-3">
-                <div className="font-medium text-lg">
+              <div className="flex justify-between items-center mb-2 sm:mb-3">
+                <div className="font-medium text-base sm:text-lg">
                  {flightData.flight.number}
                 </div>
               </div>
               {displayedDistance !== null && (
                 <div className="text-center">
-                  <div className={`text-sm font-medium mb-1 ${
+                  <div className={`text-xs sm:text-sm font-medium mb-1 ${
                     isDarkMode ? 'text-blue-200' : 'text-blue-800'
                   }`}>
                     Distance to Aircraft
                   </div>
-                  <div className="font-mono text-2xl font-bold">
+                  <div className="font-mono text-lg sm:text-2xl font-bold">
                     {Math.round(displayedDistance).toLocaleString()}m
                   </div>
                 </div>
               )}
 
-              <div className="space-y-3">
+              <div className="space-y-2 sm:space-y-3">
                 {flightData.live && (
-                  <div className="grid grid-cols-2 gap-4 mt-2">
+                  <div className="grid grid-cols-2 gap-2 sm:gap-4 mt-1 sm:mt-2">
                     <div>
-                      <div className={`text-sm font-medium text-center ${
+                      <div className={`text-xs sm:text-sm font-medium text-center ${
                         isDarkMode ? 'text-blue-200' : 'text-blue-800'
                       }`}>
                         Altitude
                       </div>
-                      <div className="text-base text-center">{metersToFeet(flightData.live.altitude)}ft</div>
+                      <div className="text-sm sm:text-base text-center">{metersToFeet(flightData.live.altitude)}ft</div>
                     </div>
                     <div>
-                      <div className={`text-sm font-medium text-center ${
+                      <div className={`text-xs sm:text-sm font-medium text-center ${
                         isDarkMode ? 'text-blue-200' : 'text-blue-800'
                       }`}>
                         Speed
                       </div>
-                      <div className="text-base text-center">{kmhToKnots(flightData.live.speed_horizontal)}kts</div>
+                      <div className="text-sm sm:text-base text-center">{kmhToKnots(flightData.live.speed_horizontal)}kts</div>
                     </div>
                     <div>
-                      <div className={`text-sm font-medium text-center ${
+                      <div className={`text-xs sm:text-sm font-medium text-center ${
                         isDarkMode ? 'text-blue-200' : 'text-blue-800'
                       }`}>
                         Direction
                       </div>
-                      <div className="text-base text-center">{flightData.live.direction}°</div>
+                      <div className="text-sm sm:text-base text-center">{flightData.live.direction}°</div>
                     </div>
                     <div>
-                      <div className={`text-sm font-medium text-center ${
+                      <div className={`text-xs sm:text-sm font-medium text-center ${
                         isDarkMode ? 'text-blue-200' : 'text-blue-800'
                       }`}>
                         Status
                       </div>
-                      <div className="text-base text-center">{flightData.live.is_ground ? 'On Ground' : 'In Air'}</div>
+                      <div className="text-sm sm:text-base text-center">{flightData.live.is_ground ? 'On Ground' : 'In Air'}</div>
                     </div>
                   </div>
                 )}
 
                 {lastApiCall && (
-                  <div className={`text-xs mt-2 text-center ${
+                  <div className={`text-[10px] sm:text-xs mt-1 sm:mt-2 text-center ${
                     isDarkMode ? 'text-blue-300' : 'text-blue-600'
                   }`}>
                     Using API data from {new Date(lastApiCall).toLocaleString()}
@@ -903,18 +903,18 @@ const FlightTracker: React.FC = () => {
           )}
           
           {trackingAllAircraft && (
-            <div className={`p-4 rounded ${
+            <div className={`p-2 sm:p-4 rounded ${
               isDarkMode ? 'bg-green-900 text-green-100' : 'bg-green-100 text-green-700'
             }`}>
-              <div className="flex justify-between items-center mb-3">
-                <div className="font-medium text-lg">
+              <div className="flex justify-between items-center mb-1 sm:mb-3">
+                <div className="font-medium text-base sm:text-lg">
                   All Aircraft
                 </div>
-                <div className="text-sm font-mono">
+                <div className="text-xs sm:text-sm font-mono">
                   {allAircraft.length} aircraft
                 </div>
               </div>
-              <div className={`text-xs mt-2 text-center ${
+              <div className={`text-[10px] sm:text-xs mt-1 sm:mt-2 text-center ${
                 isDarkMode ? 'text-green-300' : 'text-green-600'
               }`}>
                 Using API data from {lastApiCall ? new Date(lastApiCall).toLocaleString() : "N/A"}
@@ -925,7 +925,7 @@ const FlightTracker: React.FC = () => {
           )}
         </div>
 
-        <div className={`h-[600px] rounded border ${
+        <div className={`h-[50vh] sm:h-[60vh] md:h-[600px] rounded border ${
           isDarkMode ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'
         }`}>
           <MapContainer

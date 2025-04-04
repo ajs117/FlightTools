@@ -188,71 +188,71 @@ const InFlightTracker: React.FC = () => {
   }, []);
 
   return (
-    <div className={`min-h-screen ${isDarkMode ? 'bg-gray-900' : 'bg-gray-100'} p-4`}>
-      <div className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow p-6 max-w-[1920px] mx-auto h-[calc(100vh-2rem)]`}>
+    <div className={`${isDarkMode ? 'bg-gray-900' : 'bg-gray-100'} p-2 sm:p-4`}>
+      <div className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow p-3 sm:p-6 max-w-full mx-auto h-[calc(100vh-2rem)]`}>
         <div className="flex flex-col h-full">
-          <div className="flex-none mb-4">
-            <h2 className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+          <div className="flex-none mb-2 sm:mb-4">
+            <h2 className={`text-xl sm:text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
               In-Flight Tracker
             </h2>
           </div>
           
           {error && (
-            <div className={`flex-none p-3 rounded mb-4 ${
+            <div className={`flex-none p-2 sm:p-3 rounded mb-2 sm:mb-4 text-sm sm:text-base ${
               isDarkMode ? 'bg-red-900 text-red-100' : 'bg-red-100 text-red-700'
             }`}>
               {error}
             </div>
           )}
 
-          <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 min-h-0">
-            {/* Map Section - Takes up most of the space */}
-            <div className="lg:col-span-9 rounded-lg overflow-hidden">
+          <div className="flex-1 flex flex-col lg:flex-row gap-3 sm:gap-4 min-h-0">
+            {/* Map Section - Takes up most of the space on large screens, full width on mobile */}
+            <div className="lg:flex-grow rounded-lg overflow-hidden h-[50vh] lg:h-auto">
               <div id="map" className="w-full h-full"></div>
             </div>
 
-            {/* Info Panels Section */}
-            <div className="lg:col-span-3 space-y-4 overflow-y-auto">
+            {/* Info Panels Section - Side by side on mobile, stacked on the side for larger screens */}
+            <div className="lg:w-80 flex flex-col gap-3 sm:gap-4 overflow-y-auto">
               {/* Flight Data Panel */}
-              <div className={`p-4 rounded-lg ${isDarkMode ? 'bg-blue-900 text-blue-100' : 'bg-blue-100 text-blue-700'}`}>
-                <div className="grid grid-cols-2 gap-4">
+              <div className={`p-3 sm:p-4 rounded-lg ${isDarkMode ? 'bg-blue-900 text-blue-100' : 'bg-blue-100 text-blue-700'}`}>
+                <div className="grid grid-cols-2 gap-2 sm:gap-4">
                   <div>
-                    <div className={`text-sm font-medium text-center ${
+                    <div className={`text-xs sm:text-sm font-medium text-center ${
                       isDarkMode ? 'text-blue-200' : 'text-blue-800'
                     }`}>
                       Altitude
                     </div>
-                    <div className="text-xl font-bold text-center">
+                    <div className="text-lg sm:text-xl font-bold text-center">
                       {flightData.altitude ? metersToFeet(flightData.altitude) : 'N/A'}ft
                     </div>
                   </div>
                   <div>
-                    <div className={`text-sm font-medium text-center ${
+                    <div className={`text-xs sm:text-sm font-medium text-center ${
                       isDarkMode ? 'text-blue-200' : 'text-blue-800'
                     }`}>
                       Speed
                     </div>
-                    <div className="text-xl font-bold text-center">
+                    <div className="text-lg sm:text-xl font-bold text-center">
                       {flightData.speed ? kmhToKnots(flightData.speed * 3.6) : 'N/A'}kts
                     </div>
                   </div>
                   <div>
-                    <div className={`text-sm font-medium text-center ${
+                    <div className={`text-xs sm:text-sm font-medium text-center ${
                       isDarkMode ? 'text-blue-200' : 'text-blue-800'
                     }`}>
                       Heading
                     </div>
-                    <div className="text-xl font-bold text-center">
+                    <div className="text-lg sm:text-xl font-bold text-center">
                       {flightData.heading?.toFixed(1) ?? 'N/A'}°
                     </div>
                   </div>
                   <div>
-                    <div className={`text-sm font-medium text-center ${
+                    <div className={`text-xs sm:text-sm font-medium text-center ${
                       isDarkMode ? 'text-blue-200' : 'text-blue-800'
                     }`}>
                       GPS Accuracy
                     </div>
-                    <div className="text-xl font-bold text-center">
+                    <div className="text-lg sm:text-xl font-bold text-center">
                       {flightData.gpsAccuracy?.toFixed(1) ?? 'N/A'}m
                     </div>
                   </div>
@@ -260,11 +260,11 @@ const InFlightTracker: React.FC = () => {
               </div>
 
               {/* Position Panel */}
-              <div className={`p-4 rounded-lg ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
-                <h3 className={`text-lg font-semibold mb-3 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+              <div className={`p-3 sm:p-4 rounded-lg ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                <h3 className={`text-sm sm:text-base lg:text-lg font-semibold mb-2 sm:mb-3 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
                   Position
                 </h3>
-                <div className="space-y-2">
+                <div className="space-y-1 sm:space-y-2 text-sm">
                   <div className="flex justify-between items-center">
                     <span className={isDarkMode ? 'text-gray-300' : 'text-gray-600'}>Latitude:</span>
                     <span className="font-mono">{flightData.latitude?.toFixed(6) ?? 'N/A'}°</span>
@@ -277,11 +277,11 @@ const InFlightTracker: React.FC = () => {
               </div>
 
               {/* Last Update Panel */}
-              <div className={`p-4 rounded-lg ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
-                <h3 className={`text-lg font-semibold mb-3 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+              <div className={`p-3 sm:p-4 rounded-lg ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                <h3 className={`text-sm sm:text-base lg:text-lg font-semibold mb-2 sm:mb-3 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
                   Last Update
                 </h3>
-                <div className={`text-center font-mono ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                <div className={`text-center font-mono text-sm sm:text-base ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
                   {flightData.lastUpdate.toLocaleTimeString()}
                 </div>
               </div>
