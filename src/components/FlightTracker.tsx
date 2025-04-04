@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
@@ -159,7 +159,7 @@ const FlightTracker: React.FC = () => {
   const [flightData, setFlightData] = useState<FlightData | null>(null);
   const [lastKnownPosition, setLastKnownPosition] = useState<InterpolatedPosition | null>(null);
   const [trackingInterval, setTrackingInterval] = useState<NodeJS.Timeout | null>(null);
-  const [autoRefreshInterval, setAutoRefreshInterval] = useState<NodeJS.Timeout | null>(null);
+  const autoRefreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [interpolationInterval, setInterpolationInterval] = useState<NodeJS.Timeout | null>(null);
   const [distanceUpdateInterval, setDistanceUpdateInterval] = useState<NodeJS.Timeout | null>(null);
   const [distanceInterpolationInterval, setDistanceInterpolationInterval] = useState<NodeJS.Timeout | null>(null);
@@ -182,10 +182,14 @@ const FlightTracker: React.FC = () => {
     // Auto-track flight if flight number exists
     const savedFlightNumber = localStorage.getItem('lastFlightNumber');
     if (savedFlightNumber) {
+      console.log('Auto-tracking saved flight:', savedFlightNumber);
       setFlightNumber(savedFlightNumber);
-      trackFlight();
+      // Use a setTimeout to ensure flightNumber state is set before tracking
+      setTimeout(() => {
+        trackFlight(false);
+      }, 100);
     }
-  }, []); // Empty dependency array means this runs once on mount
+  }, []);  // Empty dependency array means this runs once on mount
 
   // Save search query to localStorage whenever it changes
   useEffect(() => {
@@ -214,26 +218,17 @@ const FlightTracker: React.FC = () => {
     }
   }, [location]);
 
-  // Cleanup tracking interval on unmount
+  // Cleanup intervals on unmount
   useEffect(() => {
     return () => {
-      if (trackingInterval) {
-        clearInterval(trackingInterval);
-      }
-      if (autoRefreshInterval) {
-        clearInterval(autoRefreshInterval);
-      }
-      if (interpolationInterval) {
-        clearInterval(interpolationInterval);
-      }
-      if (distanceUpdateInterval) {
-        clearInterval(distanceUpdateInterval);
-      }
-      if (distanceInterpolationInterval) {
-        clearInterval(distanceInterpolationInterval);
-      }
+      console.log('Component unmounting, clearing all intervals.');
+      if (trackingInterval) clearInterval(trackingInterval);
+      if (autoRefreshIntervalRef.current) clearInterval(autoRefreshIntervalRef.current);
+      if (interpolationInterval) clearInterval(interpolationInterval);
+      if (distanceUpdateInterval) clearInterval(distanceUpdateInterval);
+      if (distanceInterpolationInterval) clearInterval(distanceInterpolationInterval);
     };
-  }, [trackingInterval, autoRefreshInterval, interpolationInterval, distanceUpdateInterval, distanceInterpolationInterval]);
+  }, []); // Empty dependency array ensures this runs only on unmount
 
   // Update distance when location or aircraft position changes
   useEffect(() => {
@@ -426,28 +421,18 @@ const FlightTracker: React.FC = () => {
   // Reset all tracking state and intervals
   const resetAllTrackingState = useCallback(() => {
     console.log('Completely resetting all tracking state');
+
+    // Clear the auto-refresh interval using the ref
+    if (autoRefreshIntervalRef.current) {
+      console.log('Clearing auto-refresh interval during reset');
+      clearInterval(autoRefreshIntervalRef.current);
+      autoRefreshIntervalRef.current = null;
+    }
     
-    // Clear aircraft data
-    setAircraftPosition(null);
-    setAllAircraft([]);
-    setTrackingAllAircraft(false);
-    setFlightData(null);
-    setLastKnownPosition(null);
-    
-    // Clear UI state
-    setDistance(null);
-    setDisplayedDistance(null);
-    setLastApiCall(null);
-    setLastDrawTime(null);
-    
-    // Clear all intervals 
+    // Clear other intervals
     if (trackingInterval) {
       clearInterval(trackingInterval);
       setTrackingInterval(null);
-    }
-    if (autoRefreshInterval) {
-      clearInterval(autoRefreshInterval);
-      setAutoRefreshInterval(null);
     }
     if (interpolationInterval) {
       clearInterval(interpolationInterval);
@@ -461,56 +446,83 @@ const FlightTracker: React.FC = () => {
       clearInterval(distanceInterpolationInterval);
       setDistanceInterpolationInterval(null);
     }
+
+    // Clear aircraft data
+    setAircraftPosition(null);
+    setAllAircraft([]);
+    setTrackingAllAircraft(false);
+    setFlightData(null);
+    setLastKnownPosition(null);
     
-    // Clear storage
+    // Clear UI state
+    setDistance(null);
+    setDisplayedDistance(null);
+    setLastApiCall(null);
+    setLastDrawTime(null);
+    
+    // Clear session storage but NOT the flight number in localStorage
     sessionStorage.removeItem('lastApiCall');
-    localStorage.removeItem('lastSearchQuery');
-    localStorage.removeItem('lastFlightNumber');
+    // Don't remove the flight number to keep it persisted
+    // localStorage.removeItem('lastFlightNumber');
+  }, [trackingInterval, interpolationInterval, distanceUpdateInterval, distanceInterpolationInterval]); // Include interval states if they are used in cleanup
+
+  // Function to clear the auto-refresh interval specifically
+  const clearAutoRefreshInterval = useCallback(() => {
+    if (autoRefreshIntervalRef.current) {
+      console.log('Clearing existing auto-refresh interval explicitly');
+      clearInterval(autoRefreshIntervalRef.current);
+      autoRefreshIntervalRef.current = null;
+    }
   }, []);
 
   // Track flight
-  const trackFlight = async (forceRefresh: boolean = false) => {
+  const trackFlight = useCallback(async (forceRefresh: boolean = false) => {
     if (!flightNumber.trim()) {
-      setError('Please enter a flight number');
+      // Don't set error if just loading from storage initially
+      if (forceRefresh) setError('Please enter a flight number');
       return;
     }
 
-    // Always reset all state before tracking a new flight
-    resetAllTrackingState();
+    // Store the flight number in localStorage immediately if not just a refresh
+    if (!forceRefresh) {
+        localStorage.setItem('lastFlightNumber', flightNumber);
+    }
+
+    // Reset state only when initiating a new track, not on auto-refresh
+    if (!forceRefresh) {
+      resetAllTrackingState();
+    } else {
+      // On auto-refresh, just clear the previous interval timer
+      clearAutoRefreshInterval();
+    }
     
     setLoading(true);
-    setError('');
+    // Clear error only when initiating, not necessarily on refresh
+    if (!forceRefresh) setError('');
 
     try {
-      // Skip clearing since we've already done it
-
-      // OpenSky Network API uses ICAO24 addresses or callsigns
-      // Since users input IATA codes, we'll search by callsign which is often similar
-      // This is not a perfect solution but helps with basic tracking
-      const callsign = flightNumber.padEnd(8, ' '); // OpenSky uses fixed-length callsigns
-
+      console.log(`Fetching flight data for ${flightNumber} (Refresh: ${forceRefresh})`);
+      const callsign = flightNumber.padEnd(8, ' ');
       const response = await fetch(
         `https://opensky-network.org/api/states/all?time=0&icao24=&callback=`
       );
 
       if (!response.ok) {
-        throw new Error('Failed to fetch flight data');
+        throw new Error(`Failed to fetch flight data (${response.status})`);
       }
 
       const data = await response.json();
       
       if (!data.states || data.states.length === 0) {
-        throw new Error('No flight data found');
+        throw new Error('No state data received from API');
       }
       
-      // Find flight by matching callsign (not perfect but works for many flights)
-      // OpenSky data format: [icao24, callsign, origin_country, time_position, time_velocity, longitude, latitude, altitude, on_ground, velocity, heading, vertical_rate, sensors, baro_altitude, squawk, spi, position_source]
       const flightState = data.states.find((state: any[]) => 
         state[1] && state[1].trim().includes(flightNumber.toUpperCase())
       );
       
       if (!flightState) {
-        throw new Error('Flight not found in tracking data');
+        throw new Error('Flight not found in current tracking data');
       }
       
       // Extract information from the OpenSky state array
@@ -557,8 +569,9 @@ const FlightTracker: React.FC = () => {
         }
       };
 
-      setLastApiCall(Date.now());
-      sessionStorage.setItem('lastApiCall', Date.now().toString());
+      const apiTimestamp = Date.now();
+      setLastApiCall(apiTimestamp);
+      sessionStorage.setItem('lastApiCall', apiTimestamp.toString());
       
       // Only update state after we have all the data to prevent flashing
       setFlightData(flight);
@@ -568,7 +581,7 @@ const FlightTracker: React.FC = () => {
         lat: flight.live.latitude,
         lng: flight.live.longitude,
         name: `${flight.airline.name} ${flight.flight.number}`,
-        timestamp: Date.now()
+        timestamp: apiTimestamp
       };
       
       // Set last known position for interpolation
@@ -580,29 +593,42 @@ const FlightTracker: React.FC = () => {
         lng: newPosition.lng,
         name: newPosition.name
       });
+
+      // Set up the NEXT auto-refresh interval
+      console.log('Setting up next auto-refresh for flight data');
+      autoRefreshIntervalRef.current = setInterval(() => {
+        console.log(`Auto-refresh triggered for flight ${flightNumber} at ${new Date().toLocaleTimeString()}`);
+        trackFlight(true); // Force refresh from API
+      }, 60000); // Refresh every 60 seconds (1 minute)
+      
     } catch (err) {
+      console.error('Error during trackFlight:', err); // Log the actual error
       setError('Error tracking flight: ' + (err instanceof Error ? err.message : 'Unknown error'));
-      // Reset all flight data on error
-      resetAllTrackingState();
+      // Stop refreshing on error by clearing the interval IF it exists
+      clearAutoRefreshInterval(); 
+      // Optionally reset state fully on error? Decided against for now to show last known good state.
+      // resetAllTrackingState(); 
     } finally {
       setLoading(false);
     }
-  };
+  }, [flightNumber, resetAllTrackingState, clearAutoRefreshInterval]);
 
   // Get all aircraft
-  const getAllAircraft = async (isAutoRefresh: boolean = false) => {
+  const getAllAircraft = useCallback(async (isAutoRefresh: boolean = false) => {
+    // Reset state only when initiating, not on auto-refresh
     if (!isAutoRefresh) {
-      // Always reset all state before tracking all aircraft
       resetAllTrackingState();
-      
-      setLoading(true);
-      setError('');
+    } else {
+      // On auto-refresh, just clear the previous interval timer
+      clearAutoRefreshInterval();
     }
     
+    setLoading(true);
+    // Clear error only when initiating
+    if (!isAutoRefresh) setError('');
+  
     try {
-      // Skip clearing since we've already done it
-      
-      // Set tracking mode
+      console.log(`Fetching all aircraft data (Refresh: ${isAutoRefresh})`);
       setTrackingAllAircraft(true);
 
       const response = await fetch(
@@ -610,59 +636,71 @@ const FlightTracker: React.FC = () => {
       );
 
       if (!response.ok) {
-        throw new Error('Failed to fetch aircraft data');
+        throw new Error(`Failed to fetch aircraft data (${response.status})`);
       }
 
       const data = await response.json();
       
       if (!data.states || data.states.length === 0) {
-        throw new Error('No aircraft data found');
+        // Not necessarily an error, could be no aircraft transmitting
+        console.log('No aircraft state data received from API.');
+        setAllAircraft([]); 
+      } else {
+          // Process aircraft data
+          const aircraftData: AllAircraftData[] = data.states
+          .filter((state: any[]) => 
+            state[5] && state[6] && 
+            !isNaN(state[5]) && !isNaN(state[6]) &&
+            !state[8] // Filter out on-ground
+          )
+          .map((state: any[]) => ({
+            icao24: state[0],
+            callsign: state[1]?.trim(),
+            latitude: state[6],
+            longitude: state[5],
+            altitude: state[7] || 0,
+            direction: state[10] || 0,
+            speed: state[9] ? state[9] * 3.6 : 0,
+            isOnGround: Boolean(state[8])
+          }));
+          setAllAircraft(aircraftData);
+          // Center map if it's the initial load
+          if (!isAutoRefresh && aircraftData.length > 0) {
+            const centralAircraft = aircraftData[Math.floor(aircraftData.length / 2)];
+            setLocation({
+              lat: centralAircraft.latitude,
+              lng: centralAircraft.longitude,
+              name: 'Map Center'
+            });
+          }
       }
       
-      // Process all aircraft
-      const aircraftData: AllAircraftData[] = data.states
-        .filter((state: any[]) => 
-          // Filter out aircraft with invalid lat/long
-          state[5] && state[6] && 
-          !isNaN(state[5]) && !isNaN(state[6]) &&
-          // Only show airborne aircraft (optional, remove if you want to show all)
-          !state[8]
-        )
-        .map((state: any[]) => ({
-          icao24: state[0],
-          callsign: state[1]?.trim(),
-          latitude: state[6],
-          longitude: state[5],
-          altitude: state[7] || 0,
-          direction: state[10] || 0,
-          speed: state[9] ? state[9] * 3.6 : 0, // Convert m/s to km/h
-          isOnGround: Boolean(state[8])
-        }));
+      const apiTimestamp = Date.now();
+      setLastApiCall(apiTimestamp);
+      sessionStorage.setItem('lastApiCall', apiTimestamp.toString());
+      setError(''); // Clear error on successful fetch
 
-      setAllAircraft(aircraftData);
-      setLastApiCall(Date.now());
-      sessionStorage.setItem('lastApiCall', Date.now().toString());
+      // Set up the NEXT auto-refresh interval
+      console.log('Setting up next auto-refresh for all aircraft data');
+      autoRefreshIntervalRef.current = setInterval(() => {
+        console.log(`Auto-refresh triggered for all aircraft at ${new Date().toLocaleTimeString()}`);
+        getAllAircraft(true); // Auto refresh
+      }, 60000); // Refresh every 60 seconds (1 minute)
       
-      // Center map to a reasonable view if we have aircraft
-      if (aircraftData.length > 0) {
-        // Find a central aircraft or just pick the first one
-        const centralAircraft = aircraftData[Math.floor(aircraftData.length / 2)];
-        setLocation({
-          lat: centralAircraft.latitude,
-          lng: centralAircraft.longitude,
-          name: 'Map Center'
-        });
-      }
     } catch (err) {
+      console.error('Error during getAllAircraft:', err); // Log the actual error
       setError('Error fetching aircraft: ' + (err instanceof Error ? err.message : 'Unknown error'));
-      setTrackingAllAircraft(false);
-      resetAllTrackingState();
+      setTrackingAllAircraft(false); // Stop tracking all mode on error
+      // Stop refreshing on error by clearing the interval
+      clearAutoRefreshInterval();
+      // Optionally reset state fully on error?
+      // resetAllTrackingState(); 
     } finally {
       setLoading(false);
     }
-  };
+  }, [resetAllTrackingState, clearAutoRefreshInterval]);
 
-  // Clear stored location
+  // Clear stored location and stop tracking
   const clearLocation = () => {
     // Reset map view
     setLocation(null);
@@ -672,7 +710,7 @@ const FlightTracker: React.FC = () => {
     setError('');
     setFlightNumber('');
     
-    // Reset all tracking state
+    // Reset all tracking state (this will also clear intervals)
     resetAllTrackingState();
     
     // Clear localStorage
@@ -762,39 +800,6 @@ const FlightTracker: React.FC = () => {
     };
   }, [flightData, lastKnownPosition, trackingAllAircraft, updateInterpolatedPosition]);
   
-  // Set up auto-refresh interval for API data
-  useEffect(() => {
-    // Clean up any existing interval first
-    if (autoRefreshInterval) {
-      console.log('Clearing existing auto-refresh interval before setting up a new one');
-      clearInterval(autoRefreshInterval);
-      setAutoRefreshInterval(null);
-    }
-
-    // If we have flight data and a flight number, set up auto-refresh
-    if ((flightData && flightNumber) || trackingAllAircraft) {
-      console.log('Setting up auto-refresh interval for flight data');
-      const refreshInterval = setInterval(() => {
-        console.log('Auto-refreshing flight data from API');
-        if (trackingAllAircraft) {
-          getAllAircraft(true); // Add parameter for refresh
-        } else {
-          trackFlight(true); // Force refresh from API
-        }
-      }, 60000); // Refresh every 60 seconds (1 minute)
-      
-      setAutoRefreshInterval(refreshInterval);
-    }
-
-    // Clean up on unmount or when dependencies change
-    return () => {
-      if (autoRefreshInterval) {
-        console.log('Clearing auto-refresh interval');
-        clearInterval(autoRefreshInterval);
-      }
-    };
-  }, [flightData, flightNumber, trackingAllAircraft, getAllAircraft, trackFlight]);
-
   return (
     <div className={`${isDarkMode ? 'bg-gray-900' : 'bg-gray-100'} p-2 sm:p-4`}>
       <div className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow p-3 sm:p-6 max-w-7xl mx-auto`}>
