@@ -1,11 +1,11 @@
 import React, { useState, Suspense, lazy, useEffect } from 'react';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
+import InFlightTracker from './components/InFlightTracker';
 
 // Lazy load components with key-based remounting
 const FlightCalculator = lazy(() => import('./components/FlightCalculator'));
 const FlightTracker = lazy(() => import('./components/FlightTracker'));
 const FlightPlanDrawer = lazy(() => import('./components/FlightPlanDrawer'));
-const InFlightTracker = lazy(() => import('./components/InFlightTracker'));
 
 const AppContent: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string | null>(null);
