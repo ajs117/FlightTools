@@ -825,6 +825,16 @@ const FlightTracker: React.FC = () => {
               >
                 Search
               </button>
+              <button
+                onClick={getCurrentLocation}
+                disabled={loading}
+                hidden={location !== null}
+                className="px-2 sm:px-4 py-1 sm:py-2 text-xs sm:text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-blue-300 whitespace-nowrap"
+              >
+                <span role="img" aria-label="GPS" className="text-lg">
+                  📍
+                </span>
+              </button>
             </div>
             <div className="w-full sm:flex-1 sm:min-w-[200px] flex gap-2">
               <input

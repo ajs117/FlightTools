@@ -608,7 +608,7 @@ const FlightCalculator: React.FC = () => {
                   <React.Fragment key={plan.id}>
                     <Polyline
                       positions={plan.route.nodes.map(w => [w.lat, w.lon])}
-                      color={isDarkMode ? "white" : "black"}
+                      color="red"
                     />
                     {routeProgress && (
                       <Marker
@@ -732,7 +732,7 @@ const FlightCalculator: React.FC = () => {
                           </div>
                         </div>
                         {routeProgress && (
-                          <div className={`text-xs sm:text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'} mt-2 sm:mt-4`}>
+                          <div className={`text-xs sm:text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'} mt-4 sm:mt-4`}>
                             Current Position: {routeProgress.position[0].toFixed(2)}, {routeProgress.position[1].toFixed(2)}
                             <br />
                             Current Time (UTC): {(() => {
