@@ -1,70 +1,102 @@
-# Getting Started with Create React App
+# FlightTools
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+A comprehensive suite of flight-related tools built with React and TypeScript. This application provides various utilities for flight planning, tracking, and in-flight monitoring.
+
+## Features
+
+- **Flight Calculator**: Calculate flight metrics, distances, and visualize routes with day/night terminator
+- **Flight Tracker**: Track real-time flights around the world
+- **Flight Plan Drawer**: Create and export custom flight plans for Microsoft Flight Simulator
+- **In-Flight Tracker**: Monitor your current flight progress and details using GPS
+
+## Technologies Used
+
+- React 19
+- TypeScript
+- Leaflet.js for map visualization
+- TailwindCSS for styling
+- Material-UI components
+- Various flight-related APIs and libraries
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js (v14 or higher)
+- npm or yarn
+
+### Installation
+
+1. Clone the repository:
+```bash
+git clone https://github.com/ajs117/FlightTools.git
+cd FlightTools
+```
+
+2. Install dependencies:
+```bash
+npm install
+```
+
+3. Start the development server:
+```bash
+npm start
+```
+
+The application will be available at [http://localhost:3000](http://localhost:3000).
 
 ## Available Scripts
 
-In the project directory, you can run:
+- `npm start`: Runs the app in development mode
+- `npm test`: Launches the test runner
+- `npm run build`: Builds the app for production
+- `npm run deploy`: Deploys the app to GitHub Pages
 
-### `npm start`
+## Project Structure
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+- `src/components/`: Contains all React components
+  - `FlightCalculator.tsx`: Flight calculation and route visualization
+  - `FlightTracker.tsx`: Real-time flight tracking
+  - `FlightPlanDrawer.tsx`: Flight plan creation and export
+  - `InFlightTracker.tsx`: In-flight monitoring using GPS
+- `src/context/`: Contains React context providers
+- `public/`: Static assets and HTML template
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+## Features in Detail
 
-### `npm test`
+### Flight Calculator
+- Calculate distances between airports
+- Visualize flight routes on an interactive map
+- View day/night terminator for flight planning
+- Calculate flight durations and time zone differences
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+### Flight Tracker
+- Track real-time flights worldwide
+- View aircraft positions and details
+- Filter and search for specific flights
 
-### `npm run build`
+### Flight Plan Drawer
+- Create custom flight plans
+- Add waypoints and airports
+- Export plans in MSFS-compatible format
+- Interactive map for route planning
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+### In-Flight Tracker
+- Real-time GPS tracking
+- Display current position, altitude, and speed
+- Show heading and accuracy information
+- Works offline with cached map tiles
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+## Contributing
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-### `npm run eject`
+## License
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+This project is licensed under the MIT License - see the LICENSE file for details.
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+## Acknowledgments
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
-
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+- OpenStreetMap for map data
+- Various flight data APIs
+- The React and TypeScript communities
