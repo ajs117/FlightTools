@@ -59,12 +59,17 @@ const InFlightTracker: React.FC = () => {
     const tileLayer = tileLayerRef.current;
     if (!tileLayer) return;
 
-    const tileLayerOffline = L.tileLayer.offline('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors',
-      subdomains: 'abc',
-      minZoom: 0,
-      maxZoom: 5, // Cache up to zoom level 5
-    });
+    const tileLayerOffline = L.tileLayer.offline(
+      isDarkMode
+        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'
+        : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
+      {
+        attribution: '© OpenStreetMap contributors, © CARTO',
+        subdomains: 'abcd',
+        minZoom: 0,
+        maxZoom: 5,
+      }
+    );
 
     // Replace the existing tile layer with the offline version
     tileLayerOffline.addTo(mapRef.current);
@@ -90,12 +95,17 @@ const InFlightTracker: React.FC = () => {
     // Initialize map
     if (!mapRef.current) {
       mapRef.current = L.map('map').setView([0, 0], 2);
-      const tileLayer = L.tileLayer.offline('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors',
-        subdomains: 'abc',
-        minZoom: 0,
-        maxZoom: 5,
-      }).addTo(mapRef.current);
+      const tileLayer = L.tileLayer.offline(
+        isDarkMode
+          ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'
+          : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
+        {
+          attribution: '© OpenStreetMap contributors, © CARTO',
+          subdomains: 'abcd',
+          minZoom: 0,
+          maxZoom: 5,
+        }
+      ).addTo(mapRef.current);
       tileLayerRef.current = tileLayer;
 
       // Start pre-caching tiles
@@ -233,6 +243,25 @@ const InFlightTracker: React.FC = () => {
         mapRef.current = null;
       }
     };
+  }, [isDarkMode]);
+
+  useEffect(() => {
+    // Update tile layer when dark mode changes
+    if (mapRef.current && tileLayerRef.current) {
+      mapRef.current.removeLayer(tileLayerRef.current);
+      const newTileLayer = L.tileLayer.offline(
+        isDarkMode
+          ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'
+          : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
+        {
+          attribution: '© OpenStreetMap contributors, © CARTO',
+          subdomains: 'abcd',
+          minZoom: 0,
+          maxZoom: 5,
+        }
+      ).addTo(mapRef.current);
+      tileLayerRef.current = newTileLayer;
+    }
   }, [isDarkMode]);
 
   return (
