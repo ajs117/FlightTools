@@ -79,6 +79,19 @@ const kmhToKnots = (kmh: number): number => {
   return Math.round(kmh * 0.539957);
 };
 
+// Banana conversion functions
+const metersToBananas = (meters: number): number => {
+  return meters / 0.1905; // Standard banana length is 7.5 inches (0.1905 meters)
+};
+
+const bananasToMeters = (bananas: number): number => {
+  return bananas * 0.1905;
+};
+
+const bananasToNauticalMiles = (bananas: number): number => {
+  return bananas * 0.1905 / 1852; // 1 nautical mile = 1852 meters
+};
+
 // Calculate interpolated position based on speed and heading
 const calculateInterpolatedPosition = (startPos: InterpolatedPosition, speed: number, heading: number): InterpolatedPosition => {
   const now = Date.now();
@@ -329,7 +342,7 @@ const FlightTracker: React.FC = () => {
       return;
     }
 
-    const diff = distance - displayedDistance;
+    const diff = metersToBananas(distance) - metersToBananas(displayedDistance);
     if (Math.abs(diff) < 1) {
       setDisplayedDistance(distance);
       return;
@@ -337,7 +350,7 @@ const FlightTracker: React.FC = () => {
 
     const step = Math.sign(diff) * Math.min(Math.abs(diff), Math.max(1, Math.abs(diff) / 5));
     const timer = setTimeout(() => {
-      setDisplayedDistance(prev => prev !== null ? prev + step : null);
+      setDisplayedDistance(prev => prev !== null ? bananasToMeters(metersToBananas(prev) + step) : null);
     }, 16); // ~60fps
 
     return () => clearTimeout(timer);
@@ -947,8 +960,16 @@ const FlightTracker: React.FC = () => {
                   }`}>
                     Distance to Aircraft
                   </div>
-                  <div className="font-mono text-lg sm:text-2xl font-bold">
-                    {Math.round(displayedDistance).toLocaleString()}m
+                  <div className="grid grid-cols-1 sm:grid-cols-3 items-center gap-1 sm:gap-2 px-4 sm:px-0">
+                    <div className="font-mono text-lg sm:text-2xl font-bold order-2 sm:order-none sm:text-right">
+                      {bananasToNauticalMiles(metersToBananas(displayedDistance)).toFixed(2)}nm
+                    </div>
+                    <div className="font-mono text-lg sm:text-2xl font-bold order-1 sm:order-none text-center">
+                      {Math.round(displayedDistance).toLocaleString()}m
+                    </div>
+                    <div className="font-mono text-lg sm:text-2xl font-bold order-3 sm:order-none sm:text-left whitespace-nowrap">
+                      {Math.round(metersToBananas(displayedDistance)).toLocaleString()}🍌
+                    </div>
                   </div>
                 </div>
               )}
