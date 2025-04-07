@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, useMap, useMapEvents, Tooltip } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import planeIcon from '../plane-icon.svg';
@@ -1080,6 +1080,21 @@ const FlightTracker: React.FC = () => {
                   iconAnchor: [8, 8]
                 })}
               >
+                <Tooltip direction="top" offset={[0, -5]} opacity={0.9} className={`${
+                  isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
+                }`}>
+                  <div className="text-xs font-medium min-w-[150px] text-center mb-1">
+                    {aircraft.callsign || 'N/A'}
+                  </div>
+                  <div className="text-[10px] grid grid-cols-2 gap-x-3 gap-y-1 min-w-[150px]">
+                    <span>Altitude:</span>
+                    <span className="font-mono text-right">{metersToFeet(aircraft.altitude)}ft</span>
+                    <span>Speed:</span>
+                    <span className="font-mono text-right">{kmhToKnots(aircraft.speed)}kts</span>
+                    <span>Direction:</span>
+                    <span className="font-mono text-right">{Math.round(aircraft.direction)}°</span>
+                  </div>
+                </Tooltip>
               </Marker>
             ))}
           </MapContainer>
