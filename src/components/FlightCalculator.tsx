@@ -491,7 +491,6 @@ const FlightCalculator: React.FC = () => {
   }, [departureTime, arrivalTime, flightPlans, calculateDuration, calculateRoutePositions]);
 
   return (
-    <div className={`${isDarkMode ? 'bg-gray-900' : 'bg-gray-100'} p-2 sm:p-4 overflow-hidden`}>
       <div className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow p-3 sm:p-6 h-full mx-auto`}>
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 sm:gap-6 h-full">
           {/* Input section */}
@@ -753,7 +752,6 @@ const FlightCalculator: React.FC = () => {
           </div>
         </div>
       </div>
-    </div>
   );
 };
 

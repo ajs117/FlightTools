@@ -839,7 +839,6 @@ const FlightTracker: React.FC = () => {
   }, [allAircraft, mapBounds, trackingAllAircraft]);
   
   return (
-    <div className={`${isDarkMode ? 'bg-gray-900' : 'bg-gray-100'} p-2 sm:p-4`}>
       <div className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow p-3 sm:p-6 max-w-7xl mx-auto`}>
         <div className="mb-2 sm:mb-4 space-y-2 sm:space-y-4">
           <div className="flex flex-col sm:flex-row flex-wrap gap-2 sm:gap-4">
@@ -1100,7 +1099,6 @@ const FlightTracker: React.FC = () => {
           </MapContainer>
         </div>
       </div>
-    </div>
   );
 };
 
