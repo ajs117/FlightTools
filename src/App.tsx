@@ -1,4 +1,4 @@
-import React, { useState, Suspense, lazy } from 'react';
+import React, { useState, Suspense, lazy, useEffect } from 'react';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 
 // Lazy load components with key-based remounting
@@ -10,6 +10,101 @@ const InFlightTracker = lazy(() => import('./components/InFlightTracker'));
 const AppContent: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const { isDarkMode, toggleTheme } = useTheme();
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  const checkConnection = async () => {
+    try {
+      // First check if we have any network connection type
+      const connection = (navigator as any).connection || (navigator as any).mozConnection || (navigator as any).webkitConnection;
+      if (connection && connection.type === 'none') {
+        return false;
+      }
+
+      // Then verify with a network request
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
+
+      const response = await fetch('https://www.google.com/favicon.ico', {
+        method: 'HEAD',
+        mode: 'no-cors',
+        cache: 'no-cache',
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  };
+
+  useEffect(() => {
+    const handleOnline = async () => {
+      const isActuallyOnline = await checkConnection();
+      setIsOnline(isActuallyOnline);
+    };
+
+    const handleOffline = async () => {
+      const isActuallyOffline = !(await checkConnection());
+      if (isActuallyOffline) {
+        setIsOnline(false);
+        // Force a re-render of the homepage cards
+        if (activeTab === null) {
+          setActiveTab('temp');
+          setTimeout(() => setActiveTab(null), 0);
+        }
+      }
+    };
+
+    // Check for network type changes
+    const handleNetworkChange = async () => {
+      const isActuallyOnline = await checkConnection();
+      if (isActuallyOnline !== isOnline) {
+        setIsOnline(isActuallyOnline);
+        if (!isActuallyOnline && activeTab === null) {
+          setActiveTab('temp');
+          setTimeout(() => setActiveTab(null), 0);
+        }
+      }
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    // Add network type change listener if available
+    const connection = (navigator as any).connection || (navigator as any).mozConnection || (navigator as any).webkitConnection;
+    if (connection) {
+      connection.addEventListener('change', handleNetworkChange);
+    }
+
+    // Add polling mechanism
+    const checkOnlineStatus = async () => {
+      const newOnlineStatus = await checkConnection();
+      if (newOnlineStatus !== isOnline) {
+        setIsOnline(newOnlineStatus);
+        if (!newOnlineStatus && activeTab === null) {
+          setActiveTab('temp');
+          setTimeout(() => setActiveTab(null), 0);
+        }
+      }
+    };
+    
+    // Initial check
+    checkOnlineStatus();
+    
+    // Use more frequent polling for mobile devices
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const intervalId = setInterval(checkOnlineStatus, isMobile ? 2000 : 5000);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      if (connection) {
+        connection.removeEventListener('change', handleNetworkChange);
+      }
+      clearInterval(intervalId);
+    };
+  }, [activeTab, isOnline]);
 
   const navigateToHome = () => {
     setActiveTab(null);
@@ -25,7 +120,12 @@ const AppContent: React.FC = () => {
               <h1 className={`text-lg sm:text-xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
                 Flight Tools
               </h1>
-              <div>
+              <div className="flex items-center gap-4">
+                {!isOnline && (
+                  <div className={`text-sm ${isDarkMode ? 'text-yellow-400' : 'text-yellow-600'}`}>
+                    Offline Mode
+                  </div>
+                )}
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
                     type="checkbox"
@@ -62,10 +162,16 @@ const AppContent: React.FC = () => {
           
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
             <div 
-              onClick={() => setActiveTab('calculator')}
-              className={`cursor-pointer rounded-xl shadow-lg p-4 sm:p-6 transform transition-all hover:scale-105 ${
+              onClick={() => {
+                if (isOnline) {
+                  setActiveTab('calculator');
+                }
+              }}
+              className={`cursor-pointer rounded-xl shadow-lg p-4 sm:p-6 transform transition-all ${
+                isOnline ? 'hover:scale-105' : 'cursor-not-allowed'
+              } ${
                 isDarkMode ? 'bg-gray-800 hover:bg-gray-700' : 'bg-white hover:bg-blue-50'
-              } flex flex-col items-center justify-center aspect-square`}
+              } flex flex-col items-center justify-center aspect-square ${!isOnline ? 'opacity-50' : ''}`}
             >
               <div className={`text-4xl sm:text-5xl mb-3 sm:mb-4 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>
                 ✈️
@@ -76,13 +182,24 @@ const AppContent: React.FC = () => {
               <p className={`text-center text-sm sm:text-base ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                 Calculate flight metrics and distances
               </p>
+              {!isOnline && (
+                <p className={`text-center text-xs mt-2 ${isDarkMode ? 'text-yellow-400' : 'text-yellow-600'}`}>
+                  Requires internet connection
+                </p>
+              )}
             </div>
             
             <div 
-              onClick={() => setActiveTab('tracker')}
-              className={`cursor-pointer rounded-xl shadow-lg p-4 sm:p-6 transform transition-all hover:scale-105 ${
+              onClick={() => {
+                if (isOnline) {
+                  setActiveTab('tracker');
+                }
+              }}
+              className={`cursor-pointer rounded-xl shadow-lg p-4 sm:p-6 transform transition-all ${
+                isOnline ? 'hover:scale-105' : 'cursor-not-allowed'
+              } ${
                 isDarkMode ? 'bg-gray-800 hover:bg-gray-700' : 'bg-white hover:bg-green-50'
-              } flex flex-col items-center justify-center aspect-square`}
+              } flex flex-col items-center justify-center aspect-square ${!isOnline ? 'opacity-50' : ''}`}
             >
               <div className={`text-4xl sm:text-5xl mb-3 sm:mb-4 ${isDarkMode ? 'text-green-400' : 'text-green-600'}`}>
                 🛫
@@ -93,13 +210,24 @@ const AppContent: React.FC = () => {
               <p className={`text-center text-sm sm:text-base ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                 Track real-time flights around the world
               </p>
+              {!isOnline && (
+                <p className={`text-center text-xs mt-2 ${isDarkMode ? 'text-yellow-400' : 'text-yellow-600'}`}>
+                  Requires internet connection
+                </p>
+              )}
             </div>
             
             <div 
-              onClick={() => setActiveTab('drawer')}
-              className={`cursor-pointer rounded-xl shadow-lg p-4 sm:p-6 transform transition-all hover:scale-105 ${
+              onClick={() => {
+                if (isOnline) {
+                  setActiveTab('drawer');
+                }
+              }}
+              className={`cursor-pointer rounded-xl shadow-lg p-4 sm:p-6 transform transition-all ${
+                isOnline ? 'hover:scale-105' : 'cursor-not-allowed'
+              } ${
                 isDarkMode ? 'bg-gray-800 hover:bg-gray-700' : 'bg-white hover:bg-purple-50'
-              } flex flex-col items-center justify-center aspect-square`}
+              } flex flex-col items-center justify-center aspect-square ${!isOnline ? 'opacity-50' : ''}`}
             >
               <div className={`text-4xl sm:text-5xl mb-3 sm:mb-4 ${isDarkMode ? 'text-purple-400' : 'text-purple-600'}`}>
                 🗺️
@@ -110,6 +238,11 @@ const AppContent: React.FC = () => {
               <p className={`text-center text-sm sm:text-base ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                 Create and export custom flight plans
               </p>
+              {!isOnline && (
+                <p className={`text-center text-xs mt-2 ${isDarkMode ? 'text-yellow-400' : 'text-yellow-600'}`}>
+                  Requires internet connection
+                </p>
+              )}
             </div>
             
             <div 
@@ -154,7 +287,12 @@ const AppContent: React.FC = () => {
                 {activeTab === 'inflight' && 'In-Flight Tracker'}
               </h1>
             </div>
-            <div>
+            <div className="flex items-center gap-4">
+              {!isOnline && (
+                <div className={`text-sm ${isDarkMode ? 'text-yellow-400' : 'text-yellow-600'}`}>
+                  Offline Mode
+                </div>
+              )}
               <label className="relative inline-flex items-center cursor-pointer">
                 <input
                   type="checkbox"
@@ -179,10 +317,36 @@ const AppContent: React.FC = () => {
         </div>
       </nav>
       <div className="max-w-6xl mx-auto px-2 sm:px-4 py-2 sm:py-3">
+        {!isOnline && activeTab !== 'inflight' && (
+          <div className={`mb-4 p-4 rounded-lg ${isDarkMode ? 'bg-yellow-900 text-yellow-200' : 'bg-yellow-100 text-yellow-800'}`}>
+            This feature requires an internet connection. Please connect to the internet to use this tool.
+          </div>
+        )}
         <Suspense fallback={<div className={`text-center py-6 sm:py-10 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>Loading...</div>}>
-          {activeTab === 'calculator' && <FlightCalculator key="calculator" />}
-          {activeTab === 'tracker' && <FlightTracker key="tracker" />}
-          {activeTab === 'drawer' && <FlightPlanDrawer key="drawer" />}
+          {activeTab === 'calculator' && !isOnline && (
+            <div className={`p-6 rounded-lg text-center ${isDarkMode ? 'bg-gray-800 text-yellow-400' : 'bg-white text-yellow-600'}`}>
+              <div className="text-5xl mb-4">📡</div>
+              <h3 className="text-xl font-bold mb-2">Internet Connection Required</h3>
+              <p>The Flight Calculator requires an internet connection to function. Please connect to the internet and try again.</p>
+            </div>
+          )}
+          {activeTab === 'tracker' && !isOnline && (
+            <div className={`p-6 rounded-lg text-center ${isDarkMode ? 'bg-gray-800 text-yellow-400' : 'bg-white text-yellow-600'}`}>
+              <div className="text-5xl mb-4">📡</div>
+              <h3 className="text-xl font-bold mb-2">Internet Connection Required</h3>
+              <p>The Flight Tracker requires an internet connection to function. Please connect to the internet and try again.</p>
+            </div>
+          )}
+          {activeTab === 'drawer' && !isOnline && (
+            <div className={`p-6 rounded-lg text-center ${isDarkMode ? 'bg-gray-800 text-yellow-400' : 'bg-white text-yellow-600'}`}>
+              <div className="text-5xl mb-4">📡</div>
+              <h3 className="text-xl font-bold mb-2">Internet Connection Required</h3>
+              <p>The Flight Plan Drawer requires an internet connection to function. Please connect to the internet and try again.</p>
+            </div>
+          )}
+          {activeTab === 'calculator' && isOnline && <FlightCalculator key={`calculator-${isOnline}`} />}
+          {activeTab === 'tracker' && isOnline && <FlightTracker key={`tracker-${isOnline}`} />}
+          {activeTab === 'drawer' && isOnline && <FlightPlanDrawer key={`drawer-${isOnline}`} />}
           {activeTab === 'inflight' && <InFlightTracker key="inflight" />}
         </Suspense>
       </div>
