@@ -1,36 +1,24 @@
 {
   "files": {
-    "main.css": "/FlightTools/static/css/main.fe187b6d.css",
-    "main.js": "/FlightTools/static/js/main.117d42d5.js",
-    "static/css/52.682a85e3.chunk.css": "/FlightTools/static/css/52.682a85e3.chunk.css",
-    "static/js/52.4b1b53d4.chunk.js": "/FlightTools/static/js/52.4b1b53d4.chunk.js",
-    "static/css/894.682a85e3.chunk.css": "/FlightTools/static/css/894.682a85e3.chunk.css",
-    "static/js/894.167747c6.chunk.js": "/FlightTools/static/js/894.167747c6.chunk.js",
-    "static/css/498.682a85e3.chunk.css": "/FlightTools/static/css/498.682a85e3.chunk.css",
-    "static/js/498.9ac59aab.chunk.js": "/FlightTools/static/js/498.9ac59aab.chunk.js",
-    "static/css/595.682a85e3.chunk.css": "/FlightTools/static/css/595.682a85e3.chunk.css",
-    "static/js/595.e3459b08.chunk.js": "/FlightTools/static/js/595.e3459b08.chunk.js",
+    "main.css": "/FlightTools/static/css/main.dd42834b.css",
+    "main.js": "/FlightTools/static/js/main.3a69c773.js",
+    "static/js/395.100ce860.chunk.js": "/FlightTools/static/js/395.100ce860.chunk.js",
+    "static/js/181.6005c145.chunk.js": "/FlightTools/static/js/181.6005c145.chunk.js",
+    "static/js/505.a6204b45.chunk.js": "/FlightTools/static/js/505.a6204b45.chunk.js",
     "static/js/453.a02d9373.chunk.js": "/FlightTools/static/js/453.a02d9373.chunk.js",
-    "static/js/169.09efaa5e.chunk.js": "/FlightTools/static/js/169.09efaa5e.chunk.js",
     "static/js/34.3eecb37c.chunk.js": "/FlightTools/static/js/34.3eecb37c.chunk.js",
     "index.html": "/FlightTools/index.html",
     "static/media/plane-icon.svg": "/FlightTools/static/media/plane-icon.5312c99550d9e701054eea554971757c.svg",
-    "main.fe187b6d.css.map": "/FlightTools/static/css/main.fe187b6d.css.map",
-    "main.117d42d5.js.map": "/FlightTools/static/js/main.117d42d5.js.map",
-    "52.682a85e3.chunk.css.map": "/FlightTools/static/css/52.682a85e3.chunk.css.map",
-    "52.4b1b53d4.chunk.js.map": "/FlightTools/static/js/52.4b1b53d4.chunk.js.map",
-    "894.682a85e3.chunk.css.map": "/FlightTools/static/css/894.682a85e3.chunk.css.map",
-    "894.167747c6.chunk.js.map": "/FlightTools/static/js/894.167747c6.chunk.js.map",
-    "498.682a85e3.chunk.css.map": "/FlightTools/static/css/498.682a85e3.chunk.css.map",
-    "498.9ac59aab.chunk.js.map": "/FlightTools/static/js/498.9ac59aab.chunk.js.map",
-    "595.682a85e3.chunk.css.map": "/FlightTools/static/css/595.682a85e3.chunk.css.map",
-    "595.e3459b08.chunk.js.map": "/FlightTools/static/js/595.e3459b08.chunk.js.map",
+    "main.dd42834b.css.map": "/FlightTools/static/css/main.dd42834b.css.map",
+    "main.3a69c773.js.map": "/FlightTools/static/js/main.3a69c773.js.map",
+    "395.100ce860.chunk.js.map": "/FlightTools/static/js/395.100ce860.chunk.js.map",
+    "181.6005c145.chunk.js.map": "/FlightTools/static/js/181.6005c145.chunk.js.map",
+    "505.a6204b45.chunk.js.map": "/FlightTools/static/js/505.a6204b45.chunk.js.map",
     "453.a02d9373.chunk.js.map": "/FlightTools/static/js/453.a02d9373.chunk.js.map",
-    "169.09efaa5e.chunk.js.map": "/FlightTools/static/js/169.09efaa5e.chunk.js.map",
     "34.3eecb37c.chunk.js.map": "/FlightTools/static/js/34.3eecb37c.chunk.js.map"
   },
   "entrypoints": [
-    "static/css/main.fe187b6d.css",
-    "static/js/main.117d42d5.js"
+    "static/css/main.dd42834b.css",
+    "static/js/main.3a69c773.js"
   ]
 }
