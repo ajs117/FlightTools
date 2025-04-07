@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import planeIcon from '../plane-icon.svg';
@@ -138,11 +138,35 @@ const MapUpdater = ({ center }: { center: [number, number] }) => {
   return null;
 };
 
+// Component to track map bounds
+const BoundsTracker = ({ setBounds }: { setBounds: React.Dispatch<React.SetStateAction<L.LatLngBounds | null>> }) => {
+  const map = useMap();
+  
+  useEffect(() => {
+    // Set initial bounds
+    setBounds(map.getBounds());
+  }, [map, setBounds]);
+  
+  // Update bounds when map moves
+  useMapEvents({
+    moveend: () => {
+      setBounds(map.getBounds());
+    },
+    zoomend: () => {
+      setBounds(map.getBounds());
+    }
+  });
+  
+  return null;
+};
+
 const FlightTracker: React.FC = () => {
   const { isDarkMode } = useTheme();
   const [location, setLocation] = useState<Location | null>(null);
   const [aircraftPosition, setAircraftPosition] = useState<Location | null>(null);
   const [allAircraft, setAllAircraft] = useState<AllAircraftData[]>([]);
+  const [visibleAircraft, setVisibleAircraft] = useState<AllAircraftData[]>([]);
+  const [mapBounds, setMapBounds] = useState<L.LatLngBounds | null>(null);
   const [trackingAllAircraft, setTrackingAllAircraft] = useState(false);
   const [distance, setDistance] = useState<number | null>(null);
   const [displayedDistance, setDisplayedDistance] = useState<number | null>(null);
@@ -799,6 +823,20 @@ const FlightTracker: React.FC = () => {
       }
     };
   }, [flightData, lastKnownPosition, trackingAllAircraft, updateInterpolatedPosition]);
+
+  // Update visible aircraft when all aircraft or map bounds change
+  useEffect(() => {
+    if (trackingAllAircraft && mapBounds && allAircraft.length > 0) {
+      // Filter aircraft to only those within the current map bounds
+      const inBoundsAircraft = allAircraft.filter(aircraft => 
+        mapBounds.contains(L.latLng(aircraft.latitude, aircraft.longitude))
+      );
+      setVisibleAircraft(inBoundsAircraft);
+      console.log(`Filtered aircraft from ${allAircraft.length} to ${inBoundsAircraft.length} visible`);
+    } else {
+      setVisibleAircraft(allAircraft);
+    }
+  }, [allAircraft, mapBounds, trackingAllAircraft]);
   
   return (
     <div className={`${isDarkMode ? 'bg-gray-900' : 'bg-gray-100'} p-2 sm:p-4`}>
@@ -976,7 +1014,7 @@ const FlightTracker: React.FC = () => {
                   All Aircraft
                 </div>
                 <div className="text-xs sm:text-sm font-mono">
-                  {allAircraft.length} aircraft
+                  {visibleAircraft.length} visible / {allAircraft.length} total
                 </div>
               </div>
               <div className={`text-[10px] sm:text-xs mt-1 sm:mt-2 text-center ${
@@ -1006,6 +1044,7 @@ const FlightTracker: React.FC = () => {
                 : "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               }
             />
+            <BoundsTracker setBounds={setMapBounds} />
             {location && (
               <Marker 
                 position={[location.lat, location.lng]} 
@@ -1028,7 +1067,7 @@ const FlightTracker: React.FC = () => {
                 <MapUpdater center={[aircraftPosition.lat, aircraftPosition.lng]} />
               </>
             )}
-            {trackingAllAircraft && allAircraft.length > 0 && allAircraft.map(aircraft => (
+            {trackingAllAircraft && visibleAircraft.length > 0 && visibleAircraft.map(aircraft => (
               <Marker 
                 key={`${aircraft.icao24}-${aircraft.latitude.toFixed(6)}-${aircraft.longitude.toFixed(6)}`}
                 position={[aircraft.latitude, aircraft.longitude]} 
