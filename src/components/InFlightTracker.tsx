@@ -79,7 +79,9 @@ const InFlightTracker: React.FC = () => {
     tileLayerRef.current = tileLayerOffline;
 
     // Start pre-caching tiles
-    const bounds = mapRef.current.getBounds();
+    const bounds = L.latLngBounds(
+      [[-90, -180], [90, 180]]
+    );
     const zoom = 5; // Maximum zoom level to cache
     const tileUrls = tileLayerOffline.getTileUrls(bounds, zoom);
     
@@ -94,7 +96,7 @@ const InFlightTracker: React.FC = () => {
   useEffect(() => {
     // Initialize map
     if (!mapRef.current) {
-      mapRef.current = L.map('map').setView([0, 0], 2);
+      mapRef.current = L.map('map').setView([0, 0], 5);
       const tileLayer = L.tileLayer.offline(
         isDarkMode
           ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'
