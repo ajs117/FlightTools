@@ -172,6 +172,26 @@ const AppContent: React.FC = () => {
           
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
             <div 
+              onClick={() => setActiveTab('inflight')}
+              className={`cursor-pointer rounded-xl shadow-lg p-4 sm:p-6 transform transition-all hover:scale-105 ${
+                isDarkMode ? 'bg-gray-800 hover:bg-gray-700' : 'bg-white hover:bg-red-50'
+              } flex flex-col items-center justify-center aspect-square`}
+              style={{ 
+                backgroundColor: theme.background.card
+              }}
+            >
+              <div className={`text-4xl sm:text-5xl mb-3 sm:mb-4 ${isDarkMode ? 'text-red-400' : 'text-red-600'}`} style={{ color: theme.primary.main }}>
+                🧭
+              </div>
+              <h3 className={`text-lg sm:text-xl font-bold mb-1 sm:mb-2 ${isDarkMode ? 'text-white' : 'text-gray-800'}`} style={{ color: theme.text.primary }}>
+                In-Flight Tracker
+              </h3>
+              <p className={`text-center text-sm sm:text-base ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`} style={{ color: theme.text.secondary }}>
+                Monitor flight progress and details
+              </p>
+            </div>
+            
+            <div 
               onClick={() => {
                 if (isOnline) {
                   setActiveTab('calculator');
@@ -262,26 +282,6 @@ const AppContent: React.FC = () => {
                   Requires internet connection
                 </p>
               )}
-            </div>
-            
-            <div 
-              onClick={() => setActiveTab('inflight')}
-              className={`cursor-pointer rounded-xl shadow-lg p-4 sm:p-6 transform transition-all hover:scale-105 ${
-                isDarkMode ? 'bg-gray-800 hover:bg-gray-700' : 'bg-white hover:bg-red-50'
-              } flex flex-col items-center justify-center aspect-square`}
-              style={{ 
-                backgroundColor: theme.background.card
-              }}
-            >
-              <div className={`text-4xl sm:text-5xl mb-3 sm:mb-4 ${isDarkMode ? 'text-red-400' : 'text-red-600'}`} style={{ color: theme.primary.main }}>
-                🧭
-              </div>
-              <h3 className={`text-lg sm:text-xl font-bold mb-1 sm:mb-2 ${isDarkMode ? 'text-white' : 'text-gray-800'}`} style={{ color: theme.text.primary }}>
-                In-Flight Tracker
-              </h3>
-              <p className={`text-center text-sm sm:text-base ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`} style={{ color: theme.text.secondary }}>
-                Monitor flight progress and details
-              </p>
             </div>
           </div>
         </div>
