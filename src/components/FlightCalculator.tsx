@@ -154,6 +154,22 @@ const calculateBearing = (start: [number, number], end: [number, number]): numbe
   return bearing;
 };
 
+const isDST = (date: Date): boolean => {
+  const year = date.getFullYear();
+  const march = new Date(year, 2, 31); // March 31
+  const october = new Date(year, 9, 31); // October 31
+  
+  // Find last Sunday of March
+  const lastSundayMarch = new Date(march);
+  lastSundayMarch.setDate(31 - ((march.getDay() + 1) % 7));
+  
+  // Find last Sunday of October
+  const lastSundayOctober = new Date(october);
+  lastSundayOctober.setDate(31 - ((october.getDay() + 1) % 7));
+  
+  return date >= lastSundayMarch && date < lastSundayOctober;
+};
+
 const FlightCalculator: React.FC = () => {
   const { isDarkMode } = useTheme();
   const [departure, setDeparture] = useState(() => {
@@ -602,7 +618,12 @@ const FlightCalculator: React.FC = () => {
                     : "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                   }
                 />
-                <DayNightTerminator currentTime={routeProgress?.currentTime ? new Date(routeProgress.currentTime.getTime() + routeProgress.currentTime.getTimezoneOffset() * 60000) : undefined} />
+                <DayNightTerminator currentTime={routeProgress?.currentTime ? (() => {
+                  const depAirport = getAirportTimezone(flightPlans[0]?.fromICAO || '');
+                  if (!depAirport) return routeProgress.currentTime;
+                  const offset = isDST(routeProgress.currentTime) ? depAirport.offset.dst : depAirport.offset.gmt;
+                  return new Date(routeProgress.currentTime.getTime() - (offset * 3600000));
+                })() : undefined} />
                 {flightPlans.map((plan) => (
                   <React.Fragment key={plan.id}>
                     <Polyline
@@ -736,9 +757,9 @@ const FlightCalculator: React.FC = () => {
                             <br />
                             Current Time (UTC): {(() => {
                               const depAirport = getAirportTimezone(flightPlans[0]?.fromICAO || '');
-                              if (!depAirport) return routeProgress.currentTime.toLocaleString();
-                              const utcTime = new Date(routeProgress.currentTime.getTime() - 
-                              ((depAirport.offset.gmt + depAirport.offset.dst) * 3600000));
+                              if (!depAirport) return routeProgress.currentTime.toLocaleString() + ' UTC';
+                              const offset = isDST(routeProgress.currentTime) ? depAirport.offset.dst : depAirport.offset.gmt;
+                              const utcTime = new Date(routeProgress.currentTime.getTime() - (offset * 3600000));
                               return utcTime.toLocaleString() + ' UTC';
                             })()}
                           </div>
