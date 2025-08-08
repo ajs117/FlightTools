@@ -36,12 +36,30 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch event - implement offline-first strategy
+// Fetch event - implement offline-first strategy with cross-origin tile and Cesium asset caching
 self.addEventListener('fetch', (event) => {
+  if (event.request.method !== 'GET') {
+    return;
+  }
+
   const url = new URL(event.request.url);
-  
-  // Only cache GET requests and our own origin
-  if (event.request.method !== 'GET' || url.origin !== self.location.origin) {
+
+  const ALLOWED_CROSS_ORIGIN_HOSTS = [
+    'basemaps.cartocdn.com',
+    'tile.openstreetmap.org',
+    'a.basemaps.cartocdn.com',
+    'b.basemaps.cartocdn.com',
+    'c.basemaps.cartocdn.com',
+    'd.basemaps.cartocdn.com',
+    // Cesium CDN
+    'cdn.jsdelivr.net',
+    'unpkg.com'
+  ];
+
+  const isSameOrigin = url.origin === self.location.origin;
+  const isAllowedCrossOrigin = ALLOWED_CROSS_ORIGIN_HOSTS.includes(url.hostname);
+
+  if (!isSameOrigin && !isAllowedCrossOrigin) {
     return;
   }
 
@@ -53,16 +71,17 @@ self.addEventListener('fetch', (event) => {
 
       return fetch(event.request)
         .then((networkResponse) => {
-          // Cache the network response
+          // Cache the network response (including opaque responses)
           return caches.open(CACHE_NAME).then((cache) => {
             cache.put(event.request, networkResponse.clone());
             return networkResponse;
           });
         })
         .catch(() => {
-          // If both cache and network fail, return a fallback response
-          if (url.pathname === '/' || url.pathname.includes('inflight')) {
-            return caches.match('/index.html');
+          if (isSameOrigin) {
+            if (url.pathname === '/' || url.pathname.includes('inflight')) {
+              return caches.match('/index.html');
+            }
           }
           return new Response('Offline content not available', {
             status: 503,
