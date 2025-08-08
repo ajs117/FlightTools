@@ -23,6 +23,16 @@ const kmhToKnots = (kmh: number): number => {
   return Math.round(kmh * 0.539957);
 };
 
+// Map camera/zoom tuning
+const DEFAULT_CAMERA_HEIGHT_METERS = 300000; // default view altitude
+const MIN_ZOOM_DISTANCE_METERS = 10000; // prevent over-zooming
+const MAX_ZOOM_DISTANCE_METERS = 20000000; // prevent zooming too far out
+const TOP_DOWN_PITCH_RADIANS = Cesium.Math.toRadians(-85); // near top-down without singularity
+
+// Tile cache range (worldwide)
+const MIN_TILE_ZOOM = 0;
+const MAX_TILE_ZOOM = 4;
+
 const InFlightTracker: React.FC = () => {
   const { isDarkMode } = useTheme();
   const [flightData, setFlightData] = useState<FlightData>({
@@ -42,24 +52,20 @@ const InFlightTracker: React.FC = () => {
   const accuracyEntityRef = useRef<Cesium.Entity | null>(null);
   const watchId = useRef<number | null>(null);
   const lastKnownPosition = useRef<GeolocationPosition | null>(null);
+  const cameraHeightRef = useRef<number>(DEFAULT_CAMERA_HEIGHT_METERS);
 
-  // Simple tile prefetch for offline use via SW caching
+  // Simple tile prefetch for offline use via SW caching (full world for MIN_TILE_ZOOM..MAX_TILE_ZOOM)
   const precacheTiles = async () => {
     const subdomains = ['a', 'b', 'c', 'd'];
     const template = isDarkMode
       ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'
       : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png';
 
-    const maxZoom = 4; // keep small for offline footprint
-    const zooms = Array.from({ length: maxZoom + 1 }, (_, z) => z);
-
     const fetches: Promise<any>[] = [];
-    for (const z of zooms) {
+    for (let z = MIN_TILE_ZOOM; z <= MAX_TILE_ZOOM; z++) {
       const num = 1 << z;
-      // Sample a coarse grid to limit requests
-      const step = Math.max(1, Math.floor(num / 4));
-      for (let x = 0; x < num; x += step) {
-        for (let y = 0; y < num; y += step) {
+      for (let x = 0; x < num; x++) {
+        for (let y = 0; y < num; y++) {
           const s = subdomains[(x + y) % subdomains.length];
           const url = template
             .replace('{s}', s)
@@ -108,9 +114,22 @@ const InFlightTracker: React.FC = () => {
       // Use terrain off for simpler offline support
       viewer.terrainProvider = new Cesium.EllipsoidTerrainProvider();
 
+      // Zoom constraints
+      viewer.scene.screenSpaceCameraController.minimumZoomDistance = MIN_ZOOM_DISTANCE_METERS;
+      viewer.scene.screenSpaceCameraController.maximumZoomDistance = MAX_ZOOM_DISTANCE_METERS;
+
+      // Track camera height so manual zoom persists
+      viewer.camera.changed.addEventListener(() => {
+        const carto = Cesium.Ellipsoid.WGS84.cartesianToCartographic(viewer.camera.position);
+        if (carto) {
+          cameraHeightRef.current = carto.height;
+        }
+      });
+
       viewerRef.current = viewer;
       viewer.camera.setView({
-        destination: Cesium.Cartesian3.fromDegrees(0, 0, 20000000)
+        destination: Cesium.Cartesian3.fromDegrees(0, 0, DEFAULT_CAMERA_HEIGHT_METERS),
+        orientation: { heading: 0, pitch: TOP_DOWN_PITCH_RADIANS, roll: 0 }
       });
 
       // Begin prefetch of some tiles for offline
@@ -158,8 +177,7 @@ const InFlightTracker: React.FC = () => {
             // Update globe
             const viewer = viewerRef.current;
             if (viewer && newData.latitude !== null && newData.longitude !== null) {
-              const height = (newData.altitude ?? 0);
-              const cart = Cesium.Cartesian3.fromDegrees(newData.longitude, newData.latitude, Math.max(10, height));
+              const cart = Cesium.Cartesian3.fromDegrees(newData.longitude, newData.latitude, 0);
 
               if (!planeEntityRef.current) {
                 planeEntityRef.current = viewer.entities.add({
@@ -204,8 +222,11 @@ const InFlightTracker: React.FC = () => {
                 }
               }
 
-              // Keep camera centered
-              viewer.camera.setView({ destination: cart, orientation: undefined });
+              // Keep camera centered but preserve user's zoom level
+              const currentHeight = Math.max(MIN_ZOOM_DISTANCE_METERS, Math.min(MAX_ZOOM_DISTANCE_METERS, cameraHeightRef.current));
+              const cameraDest = Cesium.Cartesian3.fromDegrees(newData.longitude, newData.latitude, currentHeight);
+              const headingRad = Cesium.Math.toRadians(newData.heading ?? 0);
+              viewer.camera.setView({ destination: cameraDest, orientation: { heading: headingRad, pitch: TOP_DOWN_PITCH_RADIANS, roll: 0 } });
             }
           },
           (error) => {
@@ -226,8 +247,7 @@ const InFlightTracker: React.FC = () => {
 
               const viewer = viewerRef.current;
               if (viewer && newData.latitude !== null && newData.longitude !== null) {
-                const height = (newData.altitude ?? 0);
-                const cart = Cesium.Cartesian3.fromDegrees(newData.longitude, newData.latitude, Math.max(10, height));
+                const cart = Cesium.Cartesian3.fromDegrees(newData.longitude, newData.latitude, 0);
                 if (planeEntityRef.current) {
                   planeEntityRef.current.position = new Cesium.ConstantPositionProperty(cart);
                   if (planeEntityRef.current.billboard) {
@@ -241,6 +261,11 @@ const InFlightTracker: React.FC = () => {
                     accuracyEntityRef.current.ellipse.semiMinorAxis = new Cesium.ConstantProperty(newData.gpsAccuracy);
                   }
                 }
+
+                const currentHeight = Math.max(MIN_ZOOM_DISTANCE_METERS, Math.min(MAX_ZOOM_DISTANCE_METERS, cameraHeightRef.current));
+                const cameraDest = Cesium.Cartesian3.fromDegrees(newData.longitude, newData.latitude, currentHeight);
+                const headingRad = Cesium.Math.toRadians(newData.heading ?? 0);
+                viewer.camera.setView({ destination: cameraDest, orientation: { heading: headingRad, pitch: TOP_DOWN_PITCH_RADIANS, roll: 0 } });
               }
             }
           },
@@ -300,7 +325,7 @@ const InFlightTracker: React.FC = () => {
         </div>
         <div className={`p-4 rounded-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'} shadow`}>
           <h3 className="text-lg font-semibold mb-2">Globe View</h3>
-          <div id="globe" className="w-full h-64 rounded-lg" />
+          <div id="globe" className="w-full h-[60vh] md:h-[70vh] rounded-lg" />
         </div>
       </div>
     </div>
