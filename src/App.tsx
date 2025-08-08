@@ -1,8 +1,9 @@
-import React, { useState, Suspense, lazy, useEffect } from 'react';
+import React, { useState, Suspense, lazy } from 'react';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
-import InFlightTracker from './components/InFlightTracker';
+import { useNetworkStatus } from './hooks/useNetworkStatus';
 
-// Lazy load components with key-based remounting
+// Lazy load components
+const InFlightTracker = lazy(() => import('./components/InFlightTracker'));
 const FlightCalculator = lazy(() => import('./components/FlightCalculator'));
 const FlightTracker = lazy(() => import('./components/FlightTracker'));
 const FlightPlanDrawer = lazy(() => import('./components/FlightPlanDrawer'));
@@ -10,105 +11,9 @@ const FlightPlanDrawer = lazy(() => import('./components/FlightPlanDrawer'));
 const AppContent: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const { isDarkMode, toggleTheme, theme } = useTheme();
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const { isOnline } = useNetworkStatus();
 
-  const checkConnection = async () => {
-    try {
-      // First check if we have any network connection type
-      const connection = (navigator as any).connection || (navigator as any).mozConnection || (navigator as any).webkitConnection;
-      if (connection && connection.type === 'none') {
-        return false;
-      }
-
-      // Then verify with a network request
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
-
-      const response = await fetch('https://www.google.com/favicon.ico', {
-        method: 'HEAD',
-        mode: 'no-cors',
-        cache: 'no-cache',
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeoutId);
-      return true;
-    } catch (error) {
-      return false;
-    }
-  };
-
-  useEffect(() => {
-    const handleOnline = async () => {
-      const isActuallyOnline = await checkConnection();
-      setIsOnline(isActuallyOnline);
-    };
-
-    const handleOffline = async () => {
-      const isActuallyOffline = !(await checkConnection());
-      if (isActuallyOffline) {
-        setIsOnline(false);
-        // Force a re-render of the homepage cards
-        if (activeTab === null) {
-          setActiveTab('temp');
-          setTimeout(() => setActiveTab(null), 0);
-        }
-      }
-    };
-
-    // Check for network type changes
-    const handleNetworkChange = async () => {
-      const isActuallyOnline = await checkConnection();
-      if (isActuallyOnline !== isOnline) {
-        setIsOnline(isActuallyOnline);
-        if (!isActuallyOnline && activeTab === null) {
-          setActiveTab('temp');
-          setTimeout(() => setActiveTab(null), 0);
-        }
-      }
-    };
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    
-    // Add network type change listener if available
-    const connection = (navigator as any).connection || (navigator as any).mozConnection || (navigator as any).webkitConnection;
-    if (connection) {
-      connection.addEventListener('change', handleNetworkChange);
-    }
-
-    // Add polling mechanism
-    const checkOnlineStatus = async () => {
-      const newOnlineStatus = await checkConnection();
-      if (newOnlineStatus !== isOnline) {
-        setIsOnline(newOnlineStatus);
-        if (!newOnlineStatus && activeTab === null) {
-          setActiveTab('temp');
-          setTimeout(() => setActiveTab(null), 0);
-        }
-      }
-    };
-    
-    // Initial check
-    checkOnlineStatus();
-    
-    // Use more frequent polling for mobile devices
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    const intervalId = setInterval(checkOnlineStatus, isMobile ? 2000 : 5000);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-      if (connection) {
-        connection.removeEventListener('change', handleNetworkChange);
-      }
-      clearInterval(intervalId);
-    };
-  }, [activeTab, isOnline]);
-
-  const navigateToHome = () => {
-    setActiveTab(null);
-  };
+  const navigateToHome = () => setActiveTab(null);
 
   // If no tool is selected, show the homepage with grid of tools
   if (activeTab === null) {
@@ -159,7 +64,6 @@ const AppContent: React.FC = () => {
             </div>
           </div>
         </nav>
-        
         <div className="max-w-6xl mx-auto p-3 sm:p-6">
           <div className="text-center mb-6 sm:mb-8">
             <h2 className={`text-2xl sm:text-3xl font-bold mb-1 sm:mb-2 ${isDarkMode ? 'text-white' : 'text-gray-800'}`} style={{ color: theme.text.primary }}>
@@ -169,16 +73,14 @@ const AppContent: React.FC = () => {
               Select a tool to get started
             </p>
           </div>
-          
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
             <div 
               onClick={() => setActiveTab('inflight')}
               className={`cursor-pointer rounded-xl shadow-lg p-4 sm:p-6 transform transition-all hover:scale-105 ${
                 isDarkMode ? 'bg-gray-800 hover:bg-gray-700' : 'bg-white hover:bg-red-50'
               } flex flex-col items-center justify-center aspect-square`}
-              style={{ 
-                backgroundColor: theme.background.card
-              }}
+              style={{ backgroundColor: theme.background.card }}
             >
               <div className={`text-4xl sm:text-5xl mb-3 sm:mb-4 ${isDarkMode ? 'text-red-400' : 'text-red-600'}`} style={{ color: theme.primary.main }}>
                 🧭
@@ -190,21 +92,15 @@ const AppContent: React.FC = () => {
                 Monitor flight progress and details
               </p>
             </div>
-            
+
             <div 
-              onClick={() => {
-                if (isOnline) {
-                  setActiveTab('calculator');
-                }
-              }}
+              onClick={() => { if (isOnline) setActiveTab('calculator'); }}
               className={`cursor-pointer rounded-xl shadow-lg p-4 sm:p-6 transform transition-all ${
                 isOnline ? 'hover:scale-105' : 'cursor-not-allowed'
               } ${
                 isDarkMode ? 'bg-gray-800 hover:bg-gray-700' : 'bg-white hover:bg-blue-50'
               } flex flex-col items-center justify-center aspect-square ${!isOnline ? 'opacity-50' : ''}`}
-              style={{ 
-                backgroundColor: theme.background.card
-              }}
+              style={{ backgroundColor: theme.background.card }}
             >
               <div className={`text-4xl sm:text-5xl mb-3 sm:mb-4 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} style={{ color: theme.primary.main }}>
                 ✈️
@@ -221,21 +117,15 @@ const AppContent: React.FC = () => {
                 </p>
               )}
             </div>
-            
+
             <div 
-              onClick={() => {
-                if (isOnline) {
-                  setActiveTab('tracker');
-                }
-              }}
+              onClick={() => { if (isOnline) setActiveTab('tracker'); }}
               className={`cursor-pointer rounded-xl shadow-lg p-4 sm:p-6 transform transition-all ${
                 isOnline ? 'hover:scale-105' : 'cursor-not-allowed'
               } ${
                 isDarkMode ? 'bg-gray-800 hover:bg-gray-700' : 'bg-white hover:bg-green-50'
               } flex flex-col items-center justify-center aspect-square ${!isOnline ? 'opacity-50' : ''}`}
-              style={{ 
-                backgroundColor: theme.background.card
-              }}
+              style={{ backgroundColor: theme.background.card }}
             >
               <div className={`text-4xl sm:text-5xl mb-3 sm:mb-4 ${isDarkMode ? 'text-green-400' : 'text-green-600'}`} style={{ color: theme.primary.main }}>
                 🛫
@@ -252,21 +142,15 @@ const AppContent: React.FC = () => {
                 </p>
               )}
             </div>
-            
+
             <div 
-              onClick={() => {
-                if (isOnline) {
-                  setActiveTab('drawer');
-                }
-              }}
+              onClick={() => { if (isOnline) setActiveTab('drawer'); }}
               className={`cursor-pointer rounded-xl shadow-lg p-4 sm:p-6 transform transition-all ${
                 isOnline ? 'hover:scale-105' : 'cursor-not-allowed'
               } ${
                 isDarkMode ? 'bg-gray-800 hover:bg-gray-700' : 'bg-white hover:bg-purple-50'
               } flex flex-col items-center justify-center aspect-square ${!isOnline ? 'opacity-50' : ''}`}
-              style={{ 
-                backgroundColor: theme.background.card
-              }}
+              style={{ backgroundColor: theme.background.card }}
             >
               <div className={`text-4xl sm:text-5xl mb-3 sm:mb-4 ${isDarkMode ? 'text-purple-400' : 'text-purple-600'}`} style={{ color: theme.primary.main }}>
                 🗺️
@@ -343,8 +227,8 @@ const AppContent: React.FC = () => {
                       </svg>
                     ) : (
                       <svg className="w-4 h-4 text-yellow-500" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                        <path fillRule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clipRule="evenodd" />
-                      </svg>
+                        <path fillRule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v 1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clipRule="evenodd" />
+                    </svg>
                     )}
                   </div>
                 </div>
