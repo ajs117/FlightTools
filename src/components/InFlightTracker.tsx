@@ -1,17 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useTheme } from '../context/ThemeContext';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-import 'leaflet.offline';
 import planeIcon from '../plane-icon.svg';
-
-// Fix for default markers
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: require('leaflet/dist/images/marker-icon-2x.png'),
-  iconUrl: require('leaflet/dist/images/marker-icon.png'),
-  shadowUrl: require('leaflet/dist/images/marker-shadow.png'),
-});
+import * as Cesium from 'cesium';
+import 'cesium/Build/Cesium/Widgets/widgets.css';
 
 interface FlightData {
   latitude: number | null;
@@ -45,76 +36,102 @@ const InFlightTracker: React.FC = () => {
   });
   const [error, setError] = useState<string | null>(null);
   const [isGpsAvailable, setIsGpsAvailable] = useState<boolean>(true);
-  const mapRef = useRef<L.Map | null>(null);
-  const markerRef = useRef<L.Marker | null>(null);
-  const accuracyCircleRef = useRef<L.Circle | null>(null);
+
+  const viewerRef = useRef<Cesium.Viewer | null>(null);
+  const planeEntityRef = useRef<Cesium.Entity | null>(null);
+  const accuracyEntityRef = useRef<Cesium.Entity | null>(null);
   const watchId = useRef<number | null>(null);
   const lastKnownPosition = useRef<GeolocationPosition | null>(null);
-  const tileLayerRef = useRef<L.TileLayer.Offline | null>(null);
 
-  // Function to pre-cache tiles
+  // Simple tile prefetch for offline use via SW caching
   const precacheTiles = async () => {
-    if (!mapRef.current) return;
+    const subdomains = ['a', 'b', 'c', 'd'];
+    const template = isDarkMode
+      ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'
+      : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png';
 
-    const tileLayer = tileLayerRef.current;
-    if (!tileLayer) return;
+    const maxZoom = 4; // keep small for offline footprint
+    const zooms = Array.from({ length: maxZoom + 1 }, (_, z) => z);
 
-    const tileLayerOffline = L.tileLayer.offline(
-      isDarkMode
-        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'
-        : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
-      {
-        attribution: '© OpenStreetMap contributors, © CARTO',
-        subdomains: 'abcd',
-        minZoom: 0,
-        maxZoom: 5,
+    const fetches: Promise<any>[] = [];
+    for (const z of zooms) {
+      const num = 1 << z;
+      // Sample a coarse grid to limit requests
+      const step = Math.max(1, Math.floor(num / 4));
+      for (let x = 0; x < num; x += step) {
+        for (let y = 0; y < num; y += step) {
+          const s = subdomains[(x + y) % subdomains.length];
+          const url = template
+            .replace('{s}', s)
+            .replace('{z}', String(z))
+            .replace('{x}', String(x))
+            .replace('{y}', String(y));
+          try {
+            fetches.push(fetch(url, { mode: 'no-cors', cache: 'reload' }).catch(() => {}));
+          } catch (_) {}
+        }
       }
-    );
-
-    // Replace the existing tile layer with the offline version
-    tileLayerOffline.addTo(mapRef.current);
-    if (tileLayer) {
-      mapRef.current.removeLayer(tileLayer);
     }
-    tileLayerRef.current = tileLayerOffline;
 
-    // Start pre-caching tiles
-    const bounds = L.latLngBounds(
-      [[-90, -180], [90, 180]]
-    );
-    const zoom = 5; // Maximum zoom level to cache
-    const tileUrls = tileLayerOffline.getTileUrls(bounds, zoom);
-    
-    try {
-      await tileLayerOffline.preCache(tileUrls);
-      console.log('Tiles pre-cached successfully');
-    } catch (err) {
-      console.error('Error pre-caching tiles:', err);
-    }
+    await Promise.all(fetches);
   };
 
   useEffect(() => {
-    // Initialize map
-    if (!mapRef.current) {
-      mapRef.current = L.map('map').setView([0, 0], 5);
-      const tileLayer = L.tileLayer.offline(
-        isDarkMode
+    if (!viewerRef.current) {
+      // Imagery provider depending on theme
+      const imageryProvider = new Cesium.UrlTemplateImageryProvider({
+        url: isDarkMode
           ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'
           : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
-        {
-          attribution: '© OpenStreetMap contributors, © CARTO',
-          subdomains: 'abcd',
-          minZoom: 0,
-          maxZoom: 5,
-        }
-      ).addTo(mapRef.current);
-      tileLayerRef.current = tileLayer;
+        subdomains: ['a', 'b', 'c', 'd'],
+        credit: '© OpenStreetMap contributors, © CARTO'
+      });
 
-      // Start pre-caching tiles
+      const viewer = new Cesium.Viewer('globe', {
+        baseLayerPicker: false,
+        geocoder: false,
+        homeButton: false,
+        navigationHelpButton: false,
+        timeline: false,
+        animation: false,
+        fullscreenButton: false,
+        sceneModePicker: false,
+        selectionIndicator: false,
+        infoBox: false,
+        shouldAnimate: false,
+      });
+
+      // Replace base layer with our provider
+      viewer.imageryLayers.removeAll();
+      viewer.imageryLayers.addImageryProvider(imageryProvider);
+
+      // Use terrain off for simpler offline support
+      viewer.terrainProvider = new Cesium.EllipsoidTerrainProvider();
+
+      viewerRef.current = viewer;
+      viewer.camera.setView({
+        destination: Cesium.Cartesian3.fromDegrees(0, 0, 20000000)
+      });
+
+      // Begin prefetch of some tiles for offline
       precacheTiles();
+    } else {
+      // Update base layer when theme changes
+      const viewer = viewerRef.current;
+      if (viewer) {
+        const newProvider = new Cesium.UrlTemplateImageryProvider({
+          url: isDarkMode
+            ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'
+            : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
+          subdomains: ['a', 'b', 'c', 'd'],
+          credit: '© OpenStreetMap contributors, © CARTO'
+        });
+        viewer.imageryLayers.removeAll();
+        viewer.imageryLayers.addImageryProvider(newProvider);
+      }
     }
 
-    // Check if GPS is available
+    // Geolocation checks
     if (!navigator.geolocation) {
       setIsGpsAvailable(false);
       setError('GPS is not available on this device');
@@ -138,57 +155,63 @@ const InFlightTracker: React.FC = () => {
             setFlightData(newData);
             setError(null);
 
-            // Update map with new position
-            if (mapRef.current && newData.latitude && newData.longitude) {
-              const latLng = L.latLng(newData.latitude, newData.longitude);
-              
-              // Update or create marker
-              if (!markerRef.current) {
-                markerRef.current = L.marker(latLng, {
-                  icon: L.divIcon({
-                    html: `<div style="transform: rotate(${newData.heading || 0}deg)">
-                      <img src="${planeIcon}" alt="plane" style="width: 24px; height: 24px;" />
-                    </div>`,
-                    className: '',
-                    iconSize: [24, 24],
-                    iconAnchor: [12, 12]
+            // Update globe
+            const viewer = viewerRef.current;
+            if (viewer && newData.latitude !== null && newData.longitude !== null) {
+              const height = (newData.altitude ?? 0);
+              const cart = Cesium.Cartesian3.fromDegrees(newData.longitude, newData.latitude, Math.max(10, height));
+
+              if (!planeEntityRef.current) {
+                planeEntityRef.current = viewer.entities.add({
+                  position: new Cesium.ConstantPositionProperty(cart),
+                  billboard: new Cesium.BillboardGraphics({
+                    image: planeIcon,
+                    scale: new Cesium.ConstantProperty(0.6),
+                    verticalOrigin: Cesium.VerticalOrigin.CENTER,
+                    horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+                    rotation: new Cesium.ConstantProperty(((newData.heading ?? 0) * Math.PI) / 180),
+                    alignedAxis: new Cesium.ConstantProperty(Cesium.Cartesian3.ZERO)
                   })
-                }).addTo(mapRef.current);
+                });
               } else {
-                markerRef.current.setLatLng(latLng);
-                markerRef.current.setIcon(L.divIcon({
-                  html: `<div style="transform: rotate(${newData.heading || 0}deg)">
-                    <img src="${planeIcon}" alt="plane" style="width: 24px; height: 24px;" />
-                  </div>`,
-                  className: '',
-                  iconSize: [24, 24],
-                  iconAnchor: [12, 12]
-                }));
+                planeEntityRef.current.position = new Cesium.ConstantPositionProperty(cart);
+                if (planeEntityRef.current.billboard) {
+                  planeEntityRef.current.billboard.rotation = new Cesium.ConstantProperty(((newData.heading ?? 0) * Math.PI) / 180);
+                }
               }
 
-              // Update or create accuracy circle
-              if (!accuracyCircleRef.current) {
-                accuracyCircleRef.current = L.circle(latLng, {
-                  radius: newData.gpsAccuracy || 0,
-                  color: isDarkMode ? '#60a5fa' : '#3b82f6',
-                  fillColor: isDarkMode ? '#60a5fa' : '#3b82f6',
-                  fillOpacity: 0.2,
-                  weight: 1
-                }).addTo(mapRef.current);
-              } else {
-                accuracyCircleRef.current.setLatLng(latLng);
-                accuracyCircleRef.current.setRadius(newData.gpsAccuracy || 0);
+              // Accuracy circle (ellipse)
+              if (newData.gpsAccuracy) {
+                if (!accuracyEntityRef.current) {
+                  accuracyEntityRef.current = viewer.entities.add({
+                    position: new Cesium.ConstantPositionProperty(Cesium.Cartesian3.fromDegrees(newData.longitude, newData.latitude)),
+                    ellipse: new Cesium.EllipseGraphics({
+                      semiMajorAxis: new Cesium.ConstantProperty(newData.gpsAccuracy),
+                      semiMinorAxis: new Cesium.ConstantProperty(newData.gpsAccuracy),
+                      height: new Cesium.ConstantProperty(0),
+                      material: Cesium.Color.fromCssColorString(isDarkMode ? '#60a5fa' : '#3b82f6').withAlpha(0.2),
+                      outline: new Cesium.ConstantProperty(true),
+                      outlineColor: new Cesium.ConstantProperty(Cesium.Color.fromCssColorString(isDarkMode ? '#60a5fa' : '#3b82f6')),
+                      outlineWidth: new Cesium.ConstantProperty(1)
+                    })
+                  });
+                } else {
+                  accuracyEntityRef.current.position = new Cesium.ConstantPositionProperty(Cesium.Cartesian3.fromDegrees(newData.longitude, newData.latitude));
+                  if (accuracyEntityRef.current.ellipse) {
+                    accuracyEntityRef.current.ellipse.semiMajorAxis = new Cesium.ConstantProperty(newData.gpsAccuracy);
+                    accuracyEntityRef.current.ellipse.semiMinorAxis = new Cesium.ConstantProperty(newData.gpsAccuracy);
+                  }
+                }
               }
 
-              // Center map on position
-              mapRef.current.setView(latLng, mapRef.current.getZoom());
+              // Keep camera centered
+              viewer.camera.setView({ destination: cart, orientation: undefined });
             }
           },
           (error) => {
             console.warn('GPS Error:', error);
             setError(`GPS Error: ${error.message}`);
-            
-            // Keep using last known position if available
+
             if (lastKnownPosition.current) {
               const newData = {
                 latitude: lastKnownPosition.current.coords.latitude,
@@ -201,23 +224,22 @@ const InFlightTracker: React.FC = () => {
               };
               setFlightData(newData);
 
-              // Update map with last known position
-              if (mapRef.current && newData.latitude && newData.longitude) {
-                const latLng = L.latLng(newData.latitude, newData.longitude);
-                if (markerRef.current) {
-                  markerRef.current.setLatLng(latLng);
-                  markerRef.current.setIcon(L.divIcon({
-                    html: `<div style="transform: rotate(${newData.heading || 0}deg)">
-                      <img src="${planeIcon}" alt="plane" style="width: 24px; height: 24px;" />
-                    </div>`,
-                    className: '',
-                    iconSize: [24, 24],
-                    iconAnchor: [12, 12]
-                  }));
+              const viewer = viewerRef.current;
+              if (viewer && newData.latitude !== null && newData.longitude !== null) {
+                const height = (newData.altitude ?? 0);
+                const cart = Cesium.Cartesian3.fromDegrees(newData.longitude, newData.latitude, Math.max(10, height));
+                if (planeEntityRef.current) {
+                  planeEntityRef.current.position = new Cesium.ConstantPositionProperty(cart);
+                  if (planeEntityRef.current.billboard) {
+                    planeEntityRef.current.billboard.rotation = new Cesium.ConstantProperty(((newData.heading ?? 0) * Math.PI) / 180);
+                  }
                 }
-                if (accuracyCircleRef.current) {
-                  accuracyCircleRef.current.setLatLng(latLng);
-                  accuracyCircleRef.current.setRadius(newData.gpsAccuracy || 0);
+                if (accuracyEntityRef.current && newData.gpsAccuracy) {
+                  accuracyEntityRef.current.position = new Cesium.ConstantPositionProperty(Cesium.Cartesian3.fromDegrees(newData.longitude, newData.latitude));
+                  if (accuracyEntityRef.current.ellipse) {
+                    accuracyEntityRef.current.ellipse.semiMajorAxis = new Cesium.ConstantProperty(newData.gpsAccuracy);
+                    accuracyEntityRef.current.ellipse.semiMinorAxis = new Cesium.ConstantProperty(newData.gpsAccuracy);
+                  }
                 }
               }
             }
@@ -240,48 +262,29 @@ const InFlightTracker: React.FC = () => {
       if (watchId.current !== null) {
         navigator.geolocation.clearWatch(watchId.current);
       }
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current = null;
+      if (viewerRef.current) {
+        viewerRef.current.entities.removeAll();
+        viewerRef.current.destroy();
+        viewerRef.current = null;
       }
+      planeEntityRef.current = null;
+      accuracyEntityRef.current = null;
     };
-  }, [isDarkMode]);
-
-  useEffect(() => {
-    // Update tile layer when dark mode changes
-    if (mapRef.current && tileLayerRef.current) {
-      mapRef.current.removeLayer(tileLayerRef.current);
-      const newTileLayer = L.tileLayer.offline(
-        isDarkMode
-          ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'
-          : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
-        {
-          attribution: '© OpenStreetMap contributors, © CARTO',
-          subdomains: 'abcd',
-          minZoom: 0,
-          maxZoom: 5,
-        }
-      ).addTo(mapRef.current);
-      tileLayerRef.current = newTileLayer;
-    }
   }, [isDarkMode]);
 
   return (
     <div className={`p-4 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
       <h2 className="text-2xl font-bold mb-4">In-Flight Tracker</h2>
-      
       {!isGpsAvailable && (
         <div className={`p-4 rounded-lg mb-4 ${isDarkMode ? 'bg-red-900 text-red-200' : 'bg-red-100 text-red-800'}`}>
           GPS is not available on this device. This tool requires GPS functionality to work.
         </div>
       )}
-
       {error && (
         <div className={`p-4 rounded-lg mb-4 ${isDarkMode ? 'bg-yellow-900 text-yellow-200' : 'bg-yellow-100 text-yellow-800'}`}>
           {error}
         </div>
       )}
-
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
         <div className={`p-4 rounded-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'} shadow`}>
           <h3 className="text-lg font-semibold mb-2">Current Position</h3>
@@ -295,10 +298,9 @@ const InFlightTracker: React.FC = () => {
             <p>Last Update: {flightData.lastUpdate.toLocaleTimeString()}</p>
           </div>
         </div>
-
         <div className={`p-4 rounded-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'} shadow`}>
-          <h3 className="text-lg font-semibold mb-2">Map View</h3>
-          <div id="map" className="w-full h-64 rounded-lg"></div>
+          <h3 className="text-lg font-semibold mb-2">Globe View</h3>
+          <div id="globe" className="w-full h-64 rounded-lg" />
         </div>
       </div>
     </div>
