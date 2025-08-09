@@ -137,14 +137,15 @@ const CesiumGlobe = forwardRef<CesiumGlobeRef, CesiumGlobeProps>(function Cesium
   }, [isDarkMode]);
 
   useImperativeHandle(ref, () => ({
-    setView: ({ lat, lng, height, headingDeg = 0, pitchDeg = -85 }) => {
+    setView: ({ lat, lng, height, headingDeg, pitchDeg = -85 }) => {
       const viewer = viewerRef.current;
       if (!viewer) return;
       const destination = Cesium.Cartesian3.fromDegrees(lng, lat, height);
       viewer.camera.setView({
         destination,
         orientation: {
-          heading: Cesium.Math.toRadians(headingDeg),
+          // Keep current camera heading unless an explicit heading is provided
+          heading: headingDeg === undefined ? viewer.camera.heading : Cesium.Math.toRadians(headingDeg),
           pitch: Cesium.Math.toRadians(pitchDeg),
           roll: 0,
         },
@@ -158,8 +159,16 @@ const CesiumGlobe = forwardRef<CesiumGlobeRef, CesiumGlobeProps>(function Cesium
       if (existing) {
         existing.position = new Cesium.ConstantPositionProperty(position);
         if (existing.billboard) {
-          existing.billboard.rotation = new Cesium.ConstantProperty(((marker.rotationDeg ?? 0) * Math.PI) / 180);
-          existing.billboard.scale = new Cesium.ConstantProperty(marker.size ? marker.size / 24 : 1);
+          // Heading is clockwise degrees from North; Cesium billboard rotation is counter-clockwise in radians → invert sign
+          existing.billboard.rotation = new Cesium.ConstantProperty(Cesium.Math.toRadians(-(marker.rotationDeg ?? 0)));
+          const baseScale = marker.size ? marker.size / 24 : 1;
+          existing.billboard.scale = new Cesium.ConstantProperty(baseScale);
+          existing.billboard.scaleByDistance = new Cesium.ConstantProperty(
+            new Cesium.NearFarScalar(
+              8.0e4, Math.max(baseScale * 0.8, 0.3),
+              3.0e6, Math.max(baseScale * 0.2, 0.18)
+            )
+          );
         }
       } else {
         viewer.entities.add({
@@ -167,11 +176,19 @@ const CesiumGlobe = forwardRef<CesiumGlobeRef, CesiumGlobeProps>(function Cesium
           position: new Cesium.ConstantPositionProperty(position),
           billboard: new Cesium.BillboardGraphics({
             image: marker.image,
+            // Base scale derived from provided size; further adjusted by scaleByDistance
             scale: new Cesium.ConstantProperty(marker.size ? marker.size / 24 : 1),
             verticalOrigin: Cesium.VerticalOrigin.CENTER,
             horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
-            rotation: new Cesium.ConstantProperty(((marker.rotationDeg ?? 0) * Math.PI) / 180),
+            rotation: new Cesium.ConstantProperty(Cesium.Math.toRadians(-(marker.rotationDeg ?? 0))),
             alignedAxis: new Cesium.ConstantProperty(Cesium.Cartesian3.ZERO),
+            // Scale with camera distance so it looks appropriate at different zoom levels
+            scaleByDistance: new Cesium.ConstantProperty(
+              new Cesium.NearFarScalar(
+                8.0e4, Math.max((marker.size ? marker.size / 24 : 1) * 0.8, 0.3),
+                3.0e6, Math.max((marker.size ? marker.size / 24 : 1) * 0.2, 0.18)
+              )
+            ),
           }),
         });
       }

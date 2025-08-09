@@ -214,7 +214,8 @@ const FlightCalculator: React.FC = () => {
       const end: [number, number] = [plan.route.nodes[nextIdx].lat, plan.route.nodes[nextIdx].lon];
       const bearing = bearingDegrees(start, end);
       globeRef.current.upsertMarker({ id: 'calc-plane', lat: routeProgress.position[0], lng: routeProgress.position[1], image: planeIcon, size: 24, rotationDeg: bearing });
-      globeRef.current.setView({ lat: routeProgress.position[0], lng: routeProgress.position[1], height: 400000, headingDeg: bearing, pitchDeg: -85 });
+      // Keep map north-up; center on route progress only
+      globeRef.current.setView({ lat: routeProgress.position[0], lng: routeProgress.position[1], height: 400000, pitchDeg: -85 });
     }
   }, [flightPlans, routeProgress]);
 

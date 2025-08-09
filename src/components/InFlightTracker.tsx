@@ -76,14 +76,15 @@ const InFlightTracker: React.FC = () => {
 
             if (globeRef.current && newData.latitude !== null && newData.longitude !== null) {
               // Update plane marker
-              globeRef.current.upsertMarker({ id: 'plane', lat: newData.latitude, lng: newData.longitude, image: planeIcon, size: 24, rotationDeg: newData.heading ?? 0 });
+              globeRef.current.upsertMarker({ id: 'plane', lat: newData.latitude, lng: newData.longitude, image: planeIcon, size: 16, rotationDeg: newData.heading ?? 0 });
               // Update accuracy ellipse
               if (newData.gpsAccuracy) {
                 globeRef.current.upsertEllipse({ id: 'accuracy', lat: newData.latitude, lng: newData.longitude, radiusMeters: newData.gpsAccuracy, colorCss: isDarkMode ? '#60a5fa' : '#3b82f6', fillAlpha: 0.2, outline: true });
               }
               // Maintain user zoom
               const currentHeight = Math.max(MIN_ZOOM_DISTANCE_METERS, Math.min(MAX_ZOOM_DISTANCE_METERS, cameraHeightRef.current));
-              globeRef.current.setView({ lat: newData.latitude, lng: newData.longitude, height: currentHeight, headingDeg: newData.heading ?? 0, pitchDeg: -85 });
+              // Keep map north-up; update position and preserve existing heading
+              globeRef.current.setView({ lat: newData.latitude, lng: newData.longitude, height: currentHeight, pitchDeg: -85 });
             }
           },
           (error) => {
@@ -92,7 +93,7 @@ const InFlightTracker: React.FC = () => {
               const coords = lastKnownPosition.current.coords;
               const newData = { latitude: coords.latitude, longitude: coords.longitude, altitude: coords.altitude, speed: coords.speed, heading: coords.heading, lastUpdate: new Date(), gpsAccuracy: coords.accuracy };
               setFlightData(newData);
-              globeRef.current.upsertMarker({ id: 'plane', lat: newData.latitude!, lng: newData.longitude!, image: planeIcon, size: 24, rotationDeg: newData.heading ?? 0 });
+              globeRef.current.upsertMarker({ id: 'plane', lat: newData.latitude!, lng: newData.longitude!, image: planeIcon, size: 16, rotationDeg: newData.heading ?? 0 });
               if (newData.gpsAccuracy) globeRef.current.upsertEllipse({ id: 'accuracy', lat: newData.latitude!, lng: newData.longitude!, radiusMeters: newData.gpsAccuracy, colorCss: isDarkMode ? '#60a5fa' : '#3b82f6', fillAlpha: 0.2, outline: true });
             }
           },

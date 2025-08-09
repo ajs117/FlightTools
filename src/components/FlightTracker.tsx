@@ -13,6 +13,7 @@ const FlightTracker: React.FC = () => {
   const [visibleAircraft, setVisibleAircraft] = useState<AllAircraftData[]>([]);
   const [trackingAllAircraft, setTrackingAllAircraft] = useState(false);
   const [distance, setDistance] = useState<number | null>(null);
+  const [followEnabled, setFollowEnabled] = useState<boolean>(true);
   const [displayedDistance, setDisplayedDistance] = useState<number | null>(null);
   const [error, setError] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState(() => localStorage.getItem('lastSearchQuery') || '');
@@ -31,6 +32,7 @@ const FlightTracker: React.FC = () => {
   const viewRectRef = useRef<{ west: number; south: number; east: number; north: number } | null>(null);
   const cameraHeightRef = useRef<number>(400000);
   const activeMarkerIdsRef = useRef<Set<string>>(new Set());
+  const lastUserInteractionRef = useRef<number>(0);
 
   // Auto-track flight and use saved location on mount
   useEffect(() => {
@@ -195,14 +197,17 @@ const FlightTracker: React.FC = () => {
       setLastKnownPosition(newPosition);
       setAircraftPosition({ lat: newPosition.lat, lng: newPosition.lng, name: newPosition.name });
       // Update globe
-      globeRef.current?.upsertMarker({ id: 'tracked-plane', lat: newPosition.lat, lng: newPosition.lng, image: planeIcon, size: 24, rotationDeg: heading || 0 });
-      globeRef.current?.setView({ lat: newPosition.lat, lng: newPosition.lng, height: cameraHeightRef.current, headingDeg: heading || 0, pitchDeg: -85 });
+      globeRef.current?.upsertMarker({ id: 'tracked-plane', lat: newPosition.lat, lng: newPosition.lng, image: planeIcon, size: 16, rotationDeg: heading || 0 });
+      // Keep map north-up on initial track; center without rotating camera (respect follow)
+      if (followEnabled) {
+        globeRef.current?.setView({ lat: newPosition.lat, lng: newPosition.lng, height: cameraHeightRef.current, pitchDeg: -85 });
+      }
       autoRefreshIntervalRef.current = setInterval(() => { trackFlight(true); }, 60000);
     } catch (err) {
       setError('Error tracking flight: ' + (err instanceof Error ? err.message : 'Unknown error'));
       clearAutoRefreshInterval();
     } finally { setLoading(false); }
-  }, [flightNumber, resetAllTrackingState, clearAutoRefreshInterval]);
+  }, [flightNumber, resetAllTrackingState, clearAutoRefreshInterval, followEnabled]);
 
   const getAllAircraft = useCallback(async (isAutoRefresh: boolean = false) => {
     if (!isAutoRefresh) resetAllTrackingState(); else clearAutoRefreshInterval();
@@ -268,21 +273,25 @@ const FlightTracker: React.FC = () => {
     visibleAircraft.forEach(ac => {
       const id = `ac-${ac.icao24}`;
       newIds.add(id);
-      globeRef.current!.upsertMarker({ id, lat: ac.latitude, lng: ac.longitude, image: planeIcon, size: 16, rotationDeg: ac.direction });
+      globeRef.current!.upsertMarker({ id, lat: ac.latitude, lng: ac.longitude, image: planeIcon, size: 12, rotationDeg: ac.direction });
     });
     // Remove markers that are no longer visible
     activeMarkerIdsRef.current.forEach(id => { if (!newIds.has(id)) globeRef.current?.removeMarker(id); });
-    activeMarkerIdsRef.current = { current: newIds } as any; // replace set reference
     activeMarkerIdsRef.current = newIds as any;
   }, [visibleAircraft, trackingAllAircraft]);
 
   // Update tracked plane marker and view
   useEffect(() => {
     if (!trackingAllAircraft && aircraftPosition && flightData && globeRef.current) {
-      globeRef.current.upsertMarker({ id: 'tracked-plane', lat: aircraftPosition.lat, lng: aircraftPosition.lng, image: planeIcon, size: 24, rotationDeg: flightData.live.direction || 0 });
-      globeRef.current.setView({ lat: aircraftPosition.lat, lng: aircraftPosition.lng, height: cameraHeightRef.current, headingDeg: flightData.live.direction || 0, pitchDeg: -85 });
+      globeRef.current.upsertMarker({ id: 'tracked-plane', lat: aircraftPosition.lat, lng: aircraftPosition.lng, image: planeIcon, size: 16, rotationDeg: flightData.live.direction || 0 });
+      const now = Date.now();
+      // Give the user more time to interact before recentering
+      const quietMs = 2500;
+      if (followEnabled && now - lastUserInteractionRef.current > quietMs) {
+        globeRef.current.setView({ lat: aircraftPosition.lat, lng: aircraftPosition.lng, height: cameraHeightRef.current, pitchDeg: -85 });
+      }
     }
-  }, [aircraftPosition, flightData, trackingAllAircraft]);
+  }, [aircraftPosition, flightData, trackingAllAircraft, followEnabled]);
 
   return (
     <div className={`${isDarkMode ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow p-3 sm:p-6 max-w-7xl mx-auto`}>
@@ -298,9 +307,12 @@ const FlightTracker: React.FC = () => {
             <button onClick={(e) => trackFlight()} disabled={loading || !flightNumber.trim() || trackingAllAircraft} className={`px-2 sm:px-4 py-1 sm:py-2 text-xs sm:text-sm bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-purple-300 whitespace-nowrap ${trackingAllAircraft ? 'opacity-50' : ''}`}>Track</button>
             <button onClick={(e) => getAllAircraft(false)} disabled={loading || trackingAllAircraft} className="px-2 sm:px-4 py-1 sm:py-2 text-xs sm:text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-green-300 whitespace-nowrap">All Aircraft</button>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
             {(location || trackingAllAircraft) && (<button onClick={clearLocation} disabled={loading} className="px-2 sm:px-4 py-1 sm:py-2 text-xs sm:text-sm bg-red-600 text-white rounded hover:bg-red-700 disabled:bg-red-300 whitespace-nowrap">Clear</button>)}
             {(flightData || trackingAllAircraft) && (<button onClick={(e) => { e.preventDefault(); trackingAllAircraft ? getAllAircraft(false) : trackFlight(true); }} className="px-2 sm:px-4 py-1 sm:py-2 text-xs sm:text-sm bg-blue-600 text-white rounded hover:bg-blue-700 whitespace-nowrap">Refresh</button>)}
+            <button onClick={() => setFollowEnabled((v) => !v)} className={`px-2 sm:px-3 py-1 text-xs sm:text-sm rounded border ${followEnabled ? 'bg-gray-200 text-gray-900' : 'bg-white text-gray-700'} ${isDarkMode ? 'border-gray-500' : 'border-gray-300'}`} title="Toggle follow camera">
+              {followEnabled ? 'Following' : 'Free look'}
+            </button>
           </div>
         </div>
 
@@ -351,6 +363,7 @@ const FlightTracker: React.FC = () => {
             if (rect) { viewRectRef.current = rect; updateVisibleAircraft(); }
             const h = globeRef.current?.getCameraHeight();
             if (typeof h === 'number') cameraHeightRef.current = h;
+            lastUserInteractionRef.current = Date.now();
           }}
         />
       </div>
