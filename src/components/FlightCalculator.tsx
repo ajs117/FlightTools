@@ -298,8 +298,9 @@ const FlightCalculator: React.FC = () => {
 
   // When the calculator component is closed/unmounted, restore globe time to current
   useEffect(() => {
+    const viewer = globeRef.current;
     return () => {
-      try { globeRef.current?.setTime(null); } catch (e) { /* ignore */ }
+      try { viewer?.setTime(null); } catch (e) { /* ignore */ }
     };
   }, []);
 

@@ -30,6 +30,7 @@ const ALLOWED_CROSS_ORIGIN_HOSTS = new Set([
   'b.basemaps.cartocdn.com',
   'c.basemaps.cartocdn.com',
   'd.basemaps.cartocdn.com',
+  'basemap.nationalmap.gov',
   'cdn.jsdelivr.net',
   'unpkg.com',
 ]);
@@ -43,6 +44,12 @@ async function trimCache(cacheName: string, maxEntries: number) {
     const remove = keys.slice(0, keys.length - maxEntries);
     await Promise.all(remove.map(r => cache.delete(r)));
   }
+}
+
+function fetchWithTimeout(request: Request, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(request, { signal: controller.signal }).finally(() => clearTimeout(timeoutId));
 }
 
 // On install, ensure basic offline shell is present (precacheAndRoute handled other assets)
@@ -79,7 +86,7 @@ self.addEventListener('fetch', (event: FetchEvent) => {
     const shellUrl = scopeUrl('./index.html');
     event.respondWith((async () => {
       try {
-        const net = await fetch(event.request);
+        const net = await fetchWithTimeout(event.request, 1500);
         if (net && net.ok) {
           const cache = await caches.open(CACHE_NAME);
           cache.put(event.request, net.clone()).catch(() => {});
@@ -122,7 +129,7 @@ self.addEventListener('fetch', (event: FetchEvent) => {
       const cachedResponse = await cache.match(event.request);
       if (cachedResponse) return cachedResponse;
       try {
-        const net = await fetch(event.request);
+        const net = await fetchWithTimeout(event.request, 3000);
         try { await cache.put(event.request, net.clone()); } catch (e) { /* ignore */ }
         trimCache(TILES_CACHE, MAX_TILE_ENTRIES).catch(() => {});
         return net;
