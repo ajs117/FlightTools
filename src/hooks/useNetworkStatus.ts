@@ -9,17 +9,19 @@ async function checkConnection(): Promise<boolean> {
     if (connection && connection.type === 'none') {
       return false;
     }
-
+    // Prefer a same-origin lightweight request so CORS/opaque responses don't give false positives.
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 3000);
-    await fetch('https://www.google.com/favicon.ico', {
-      method: 'HEAD',
-      mode: 'no-cors',
-      cache: 'no-cache',
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-    return true;
+    try {
+      const publicUrl = process.env.PUBLIC_URL || '';
+      const pingUrl = `${publicUrl}/favicon.ico`;
+      const resp = await fetch(pingUrl, { method: 'HEAD', cache: 'no-cache', signal: controller.signal });
+      clearTimeout(timeoutId);
+      return resp && resp.ok;
+    } catch (e) {
+      clearTimeout(timeoutId);
+      return false;
+    }
   } catch {
     return false;
   }

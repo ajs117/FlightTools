@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Search, Loader } from 'lucide-react';
 import airportTimezone from 'airport-timezone';
+import { zonedTimeToUtc } from 'date-fns-tz';
 import { Slider } from '@mui/material';
 import planeIcon from '../plane-icon.svg';
 import { useTheme } from '../context/ThemeContext';
@@ -65,14 +66,7 @@ const findClosestPosition = (positions: CachedRoutePosition[], target: number): 
     : null;
 };
 
-const isDST = (date: Date): boolean => {
-  const year = date.getFullYear();
-  const march = new Date(year, 2, 31);
-  const october = new Date(year, 9, 31);
-  const lastSundayMarch = new Date(march); lastSundayMarch.setDate(31 - ((march.getDay() + 1) % 7));
-  const lastSundayOctober = new Date(october); lastSundayOctober.setDate(31 - ((october.getDay() + 1) % 7));
-  return date >= lastSundayMarch && date < lastSundayOctober;
-};
+// Removed manual DST logic; use IANA timezones via date-fns-tz for accurate conversions.
 
 const FlightCalculator: React.FC = () => {
   const { isDarkMode } = useTheme();
@@ -114,14 +108,18 @@ const FlightCalculator: React.FC = () => {
     const depAirport = getAirportTimezone(depICAO);
     const arrAirport = getAirportTimezone(arrICAO);
     if (!depAirport || !arrAirport) return 'Unknown duration';
-    const depDate = new Date(depTime);
-    const arrDate = new Date(arrTime);
-    const depUTC = new Date(depDate.getTime() - depAirport.offset.dst * 3600000);
-    const arrUTC = new Date(arrDate.getTime() - arrAirport.offset.dst * 3600000);
-    const durationMs = arrUTC.getTime() - depUTC.getTime();
-    const hours = Math.floor(durationMs / 3600000);
-    const minutes = Math.round((durationMs % 3600000) / 60000);
-    return `${hours}h ${minutes}m`;
+    try {
+      // Interpret depTime/arrTime as wall-times in their respective airport timezones
+      const depUTC = zonedTimeToUtc(depTime, depAirport.timezone);
+      const arrUTC = zonedTimeToUtc(arrTime, arrAirport.timezone);
+      const durationMs = arrUTC.getTime() - depUTC.getTime();
+      if (durationMs < 0) return 'Invalid times';
+      const hours = Math.floor(durationMs / 3600000);
+      const minutes = Math.round((durationMs % 3600000) / 60000);
+      return `${hours}h ${minutes}m`;
+    } catch (e) {
+      return 'Unknown duration';
+    }
   }, [getAirportTimezone]);
 
   const searchFlightPlans = async () => {
@@ -155,7 +153,6 @@ const FlightCalculator: React.FC = () => {
     const taxiTime = 10 * 60 * 1000;
     const [hours, minutes] = duration.split('h ').map(part => parseInt(part.replace('m', '')));
     const totalDurationMs = hours * 3600000 + minutes * 60000;
-    const flightDurationMs = totalDurationMs - taxiTime * 2;
     let adjustedPercentage = percentage;
     const taxiPercentage = (taxiTime / totalDurationMs) * 100;
     if (percentage <= taxiPercentage) adjustedPercentage = 0;
@@ -173,6 +170,7 @@ const FlightCalculator: React.FC = () => {
       const end = waypoints[currentSegment + 1];
       position = [start.lat + (end.lat - start.lat) * segmentProgress, start.lon + (end.lon - start.lon) * segmentProgress];
     }
+    // depTime is expected to be an ISO UTC string here (see calculateRoutePositions)
     const startTime = new Date(depTime);
     const elapsedMs = (totalDurationMs * percentage) / 100;
     const currentTime = new Date(startTime.getTime() + elapsedMs);
@@ -188,11 +186,22 @@ const FlightCalculator: React.FC = () => {
     const steps = Math.ceil(totalDurationMs / INTERVAL);
     for (let i = 0; i <= steps; i++) {
       const percentage = (i * INTERVAL * 100) / totalDurationMs; if (percentage > 100) break;
-      const progress = calculateRoutePosition(plan.route.nodes, percentage, depTime, plan.duration);
+      // Convert departure wall-time into UTC using the plan's departure timezone
+      let depUtcIso = depTime;
+      try {
+        const depAirport = getAirportTimezone(plan.fromICAO);
+        if (depAirport) {
+          const depUtc = zonedTimeToUtc(depTime, depAirport.timezone);
+          depUtcIso = depUtc.toISOString();
+        }
+      } catch (e) {
+        // fall back to provided depTime
+      }
+      const progress = calculateRoutePosition(plan.route.nodes, percentage, depUtcIso, plan.duration);
       positions.push({ ...progress, timeString: progress.currentTime.toLocaleTimeString() });
     }
     setCachedPositions(positions); setSliderValue(0); setRouteProgress(positions[0] || null);
-  }, [calculateRoutePosition]);
+  }, [calculateRoutePosition, getAirportTimezone]);
 
   useEffect(() => {
     // Draw route and aircraft on globe when plan/progress changes
@@ -312,13 +321,7 @@ const FlightCalculator: React.FC = () => {
                         <div className={`text-xs sm:text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'} mt-4 sm:mt-4`}>
                           Current Position: {routeProgress.position[0].toFixed(2)}, {routeProgress.position[1].toFixed(2)}
                           <br />
-                          Current Time (UTC): {(() => {
-                            const depAirport = getAirportTimezone(flightPlans[0]?.fromICAO || '');
-                            if (!depAirport) return routeProgress.currentTime.toLocaleString() + ' UTC';
-                            const offset = isDST(routeProgress.currentTime) ? depAirport.offset.dst : depAirport.offset.gmt;
-                            const utcTime = new Date(routeProgress.currentTime.getTime() - offset * 3600000);
-                            return utcTime.toLocaleString() + ' UTC';
-                          })()}
+                          Current Time (UTC): {routeProgress.currentTime.toUTCString()}
                         </div>
                       )}
                     </div>

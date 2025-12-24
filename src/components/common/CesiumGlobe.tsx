@@ -94,9 +94,22 @@ const CesiumGlobe = forwardRef<CesiumGlobeRef, CesiumGlobeProps>(function Cesium
       orientation: { heading: 0, pitch: TOP_DOWN_PITCH, roll: 0 },
     });
 
-    // Click handler
+    // Make the container touch-friendly on mobile and avoid default browser gestures
+    if (containerRef.current) {
+      containerRef.current.style.touchAction = 'none';
+      // suppress tap highlight on some mobile browsers
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      containerRef.current.style.webkitTapHighlightColor = 'transparent';
+    }
+
+    // Keep references to handlers so we can clean them up properly
+    let handler: Cesium.ScreenSpaceEventHandler | null = null;
+    let viewChangedCallback: (() => void) | null = null;
+
+    // Click/tap handler
     if (onClick) {
-      const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+      handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
       handler.setInputAction((movement: any) => {
         const cartesian = viewer.camera.pickEllipsoid(movement.position, Cesium.Ellipsoid.WGS84);
         if (cartesian) {
@@ -108,19 +121,67 @@ const CesiumGlobe = forwardRef<CesiumGlobeRef, CesiumGlobeProps>(function Cesium
       }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
     }
 
+    // View change callback (store reference for cleanup)
     if (onViewChange) {
-      viewer.camera.changed.addEventListener(() => {
+      viewChangedCallback = () => {
         onViewChange();
-      });
+      };
+      viewer.camera.changed.addEventListener(viewChangedCallback);
+    }
+
+    // Request re-render on window resize/orientation change so Cesium can update canvas size
+    const resizeHandler = () => {
+      try {
+        viewer.scene.requestRender();
+      } catch (e) {
+        // ignore if viewer destroyed
+      }
+    };
+    window.addEventListener('resize', resizeHandler);
+    window.addEventListener('orientationchange', resizeHandler);
+
+    // Ensure initial render after setup
+    try {
+      viewer.scene.requestRender();
+    } catch (e) {
+      // ignore
     }
 
     viewerRef.current = viewer;
     return () => {
-      viewer.entities.removeAll();
-      viewer.destroy();
+      // remove window listeners
+      window.removeEventListener('resize', resizeHandler);
+      window.removeEventListener('orientationchange', resizeHandler);
+
+      // destroy input handler
+      if (handler) {
+        try {
+          handler.destroy();
+        } catch (e) {
+          // ignore
+        }
+        handler = null;
+      }
+
+      // remove camera changed listener
+      if (viewChangedCallback) {
+        try {
+          viewer.camera.changed.removeEventListener(viewChangedCallback);
+        } catch (e) {
+          // ignore
+        }
+        viewChangedCallback = null;
+      }
+
+      try {
+        viewer.entities.removeAll();
+        viewer.destroy();
+      } catch (e) {
+        // ignore
+      }
       viewerRef.current = null;
     };
-  }, []);
+  }, [initialCenter.lat, initialCenter.lng, initialCenter.height, isDarkMode, minZoom, maxZoom, onClick, onViewChange]);
 
   useEffect(() => {
     const viewer = viewerRef.current;
@@ -204,7 +265,8 @@ const CesiumGlobe = forwardRef<CesiumGlobeRef, CesiumGlobeProps>(function Cesium
       if (!viewer) return;
       const existing = viewer.entities.getById(poly.id);
       const positions = poly.positions.map(p => Cesium.Cartesian3.fromDegrees(p.lng, p.lat, p.height ?? 0));
-      const color = poly.colorCss ? Cesium.Color.fromCssColorString(poly.colorCss) : Cesium.Color.fromCssColorString('#2563EB');
+      const defaultPolylineColor = isDarkMode ? '#60A5FA' : '#2563EB';
+      const color = poly.colorCss ? Cesium.Color.fromCssColorString(poly.colorCss) : Cesium.Color.fromCssColorString(defaultPolylineColor);
       const material = new Cesium.ColorMaterialProperty(color);
       if (existing) {
         if (existing.polyline) {
@@ -234,7 +296,8 @@ const CesiumGlobe = forwardRef<CesiumGlobeRef, CesiumGlobeProps>(function Cesium
       if (!viewer) return;
       const existing = viewer.entities.getById(ellipse.id);
       const position = Cesium.Cartesian3.fromDegrees(ellipse.lng, ellipse.lat);
-      const color = Cesium.Color.fromCssColorString(ellipse.colorCss ?? '#3b82f6').withAlpha(ellipse.fillAlpha ?? 0.2);
+      const defaultEllipseColor = isDarkMode ? '#60A5FA' : '#3b82f6';
+      const color = Cesium.Color.fromCssColorString(ellipse.colorCss ?? defaultEllipseColor).withAlpha(ellipse.fillAlpha ?? 0.2);
       const material = new Cesium.ColorMaterialProperty(color);
       if (existing) {
         if (existing.ellipse) {
@@ -243,7 +306,7 @@ const CesiumGlobe = forwardRef<CesiumGlobeRef, CesiumGlobeProps>(function Cesium
           existing.ellipse.semiMinorAxis = new Cesium.ConstantProperty(ellipse.radiusMeters);
           existing.ellipse.material = material;
           existing.ellipse.outline = new Cesium.ConstantProperty(ellipse.outline ?? true);
-          existing.ellipse.outlineColor = new Cesium.ConstantProperty(Cesium.Color.fromCssColorString(ellipse.colorCss ?? '#3b82f6'));
+          existing.ellipse.outlineColor = new Cesium.ConstantProperty(Cesium.Color.fromCssColorString(ellipse.colorCss ?? defaultEllipseColor));
           existing.ellipse.outlineWidth = new Cesium.ConstantProperty(1);
         }
       } else {
@@ -256,7 +319,7 @@ const CesiumGlobe = forwardRef<CesiumGlobeRef, CesiumGlobeProps>(function Cesium
             height: new Cesium.ConstantProperty(0),
             material,
             outline: new Cesium.ConstantProperty(ellipse.outline ?? true),
-            outlineColor: new Cesium.ConstantProperty(Cesium.Color.fromCssColorString(ellipse.colorCss ?? '#3b82f6')),
+            outlineColor: new Cesium.ConstantProperty(Cesium.Color.fromCssColorString(ellipse.colorCss ?? defaultEllipseColor)),
             outlineWidth: new Cesium.ConstantProperty(1),
           }),
         });
@@ -288,7 +351,13 @@ const CesiumGlobe = forwardRef<CesiumGlobeRef, CesiumGlobeProps>(function Cesium
     }
   }));
 
-  return <div ref={containerRef} className="w-full h-full" />;
+  return (
+    <div
+      ref={containerRef}
+      className="w-full h-full"
+      style={{ width: '100%', height: '100%', minHeight: 300, touchAction: 'none' }}
+    />
+  );
 });
 
 export default CesiumGlobe; 

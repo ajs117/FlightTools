@@ -3,10 +3,11 @@ import planeIcon from '../plane-icon.svg';
 import { useTheme } from '../context/ThemeContext';
 import CesiumGlobe, { CesiumGlobeRef } from './common/CesiumGlobe';
 import { AllAircraftData, FlightData, InterpolatedPosition, Location } from '../models';
+import { getAllAircraftData, findStateByFlightNumber } from '../services/opensky';
 import { bananasToMeters, bananasToNauticalMiles, calculateInterpolatedPosition, haversineDistanceMeters, kmhToKnots, metersToBananas, metersToFeet } from '../utils/geo';
 
 const FlightTracker: React.FC = () => {
-  const { isDarkMode } = useTheme();
+  const { isDarkMode, theme } = useTheme();
   const [location, setLocation] = useState<Location | null>(null);
   const [aircraftPosition, setAircraftPosition] = useState<Location | null>(null);
   const [allAircraft, setAllAircraft] = useState<AllAircraftData[]>([]);
@@ -21,11 +22,11 @@ const FlightTracker: React.FC = () => {
   const [flightNumber, setFlightNumber] = useState(() => localStorage.getItem('lastFlightNumber') || '');
   const [flightData, setFlightData] = useState<FlightData | null>(null);
   const [lastKnownPosition, setLastKnownPosition] = useState<InterpolatedPosition | null>(null);
-  const [trackingInterval, setTrackingInterval] = useState<NodeJS.Timeout | null>(null);
-  const autoRefreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const [interpolationInterval, setInterpolationInterval] = useState<NodeJS.Timeout | null>(null);
-  const [distanceUpdateInterval, setDistanceUpdateInterval] = useState<NodeJS.Timeout | null>(null);
-  const [distanceInterpolationInterval, setDistanceInterpolationInterval] = useState<NodeJS.Timeout | null>(null);
+  const trackingIntervalRef = useRef<number | null>(null);
+  const autoRefreshIntervalRef = useRef<number | null>(null);
+  const interpolationIntervalRef = useRef<number | null>(null);
+  const distanceUpdateIntervalRef = useRef<number | null>(null);
+  const distanceInterpolationIntervalRef = useRef<number | null>(null);
   const [lastApiCall, setLastApiCall] = useState<number | null>(null);
 
   const globeRef = useRef<CesiumGlobeRef | null>(null);
@@ -33,19 +34,11 @@ const FlightTracker: React.FC = () => {
   const cameraHeightRef = useRef<number>(400000);
   const activeMarkerIdsRef = useRef<Set<string>>(new Set());
   const lastUserInteractionRef = useRef<number>(0);
+  // Throttling refs for view-change handling
+  const viewChangeHandlerRef = useRef<() => void>(() => {});
+  const viewChangeThrottleRef = useRef<{ timeoutId: number | null }>({ timeoutId: null });
 
-  // Auto-track flight and use saved location on mount
-  useEffect(() => {
-    const savedLocation = localStorage.getItem('lastLocation');
-    if (savedLocation) {
-      try { setLocation(JSON.parse(savedLocation)); } catch (e) { console.error('Error parsing saved location:', e); }
-    }
-    const savedFlightNumber = localStorage.getItem('lastFlightNumber');
-    if (savedFlightNumber) {
-      setFlightNumber(savedFlightNumber);
-      setTimeout(() => { trackFlight(false); }, 100);
-    }
-  }, []);
+  // Auto-track flight and use saved location on mount (effect moved below where `trackFlight` is defined)
 
   // Persist UI state
   useEffect(() => { searchQuery ? localStorage.setItem('lastSearchQuery', searchQuery) : localStorage.removeItem('lastSearchQuery'); }, [searchQuery]);
@@ -54,11 +47,11 @@ const FlightTracker: React.FC = () => {
 
   // Cleanup intervals on unmount
   useEffect(() => () => {
-    if (trackingInterval) clearInterval(trackingInterval);
-    if (autoRefreshIntervalRef.current) clearInterval(autoRefreshIntervalRef.current);
-    if (interpolationInterval) clearInterval(interpolationInterval);
-    if (distanceUpdateInterval) clearInterval(distanceUpdateInterval);
-    if (distanceInterpolationInterval) clearInterval(distanceInterpolationInterval);
+    if (trackingIntervalRef.current) { clearInterval(trackingIntervalRef.current); trackingIntervalRef.current = null; }
+    if (autoRefreshIntervalRef.current) { clearInterval(autoRefreshIntervalRef.current); autoRefreshIntervalRef.current = null; }
+    if (interpolationIntervalRef.current) { clearInterval(interpolationIntervalRef.current); interpolationIntervalRef.current = null; }
+    if (distanceUpdateIntervalRef.current) { clearInterval(distanceUpdateIntervalRef.current); distanceUpdateIntervalRef.current = null; }
+    if (distanceInterpolationIntervalRef.current) { clearInterval(distanceInterpolationIntervalRef.current); distanceInterpolationIntervalRef.current = null; }
   }, []);
 
   // Update distance when location or aircraft position changes
@@ -67,28 +60,28 @@ const FlightTracker: React.FC = () => {
       const newDistance = haversineDistanceMeters(location.lat, location.lng, aircraftPosition.lat, aircraftPosition.lng);
       setDistance(newDistance);
       setDisplayedDistance(newDistance);
-      if (distanceUpdateInterval) clearInterval(distanceUpdateInterval);
-      if (distanceInterpolationInterval) clearInterval(distanceInterpolationInterval);
-      const interval = setInterval(() => {
+      if (distanceUpdateIntervalRef.current) { clearInterval(distanceUpdateIntervalRef.current); distanceUpdateIntervalRef.current = null; }
+      if (distanceInterpolationIntervalRef.current) { clearInterval(distanceInterpolationIntervalRef.current); distanceInterpolationIntervalRef.current = null; }
+      const interval = window.setInterval(() => {
         if (location && aircraftPosition) {
           setDistance(haversineDistanceMeters(location.lat, location.lng, aircraftPosition.lat, aircraftPosition.lng));
         }
       }, 25);
-      setDistanceUpdateInterval(interval);
+      distanceUpdateIntervalRef.current = interval;
       if (flightData?.live && lastKnownPosition) {
-        const distanceInterpolation = setInterval(() => {
+        const distanceInterpolation = window.setInterval(() => {
           if (flightData.live && lastKnownPosition && !flightData.live.is_ground && flightData.live.speed_horizontal >= 50) {
             const newPos = calculateInterpolatedPosition(lastKnownPosition, flightData.live.speed_horizontal, flightData.live.direction);
             setAircraftPosition({ lat: newPos.lat, lng: newPos.lng, name: `${flightData.airline.name} ${flightData.flight.number}` });
           }
         }, 100);
-        setDistanceInterpolationInterval(distanceInterpolation);
+        distanceInterpolationIntervalRef.current = distanceInterpolation;
       }
     } else {
       setDistance(null);
       setDisplayedDistance(null);
-      if (distanceUpdateInterval) { clearInterval(distanceUpdateInterval); setDistanceUpdateInterval(null); }
-      if (distanceInterpolationInterval) { clearInterval(distanceInterpolationInterval); setDistanceInterpolationInterval(null); }
+      if (distanceUpdateIntervalRef.current) { clearInterval(distanceUpdateIntervalRef.current); distanceUpdateIntervalRef.current = null; }
+      if (distanceInterpolationIntervalRef.current) { clearInterval(distanceInterpolationIntervalRef.current); distanceInterpolationIntervalRef.current = null; }
     }
   }, [location, aircraftPosition, flightData, lastKnownPosition]);
 
@@ -145,12 +138,45 @@ const FlightTracker: React.FC = () => {
     }
   }, [flightData, lastKnownPosition]);
 
+  // Update visible aircraft when view rectangle or all aircraft changes
+  const updateVisibleAircraft = useCallback(() => {
+    const rect = viewRectRef.current;
+    if (trackingAllAircraft && rect && allAircraft.length > 0) {
+      const inView = allAircraft.filter(a => a.latitude >= rect.south && a.latitude <= rect.north && a.longitude >= rect.west && a.longitude <= rect.east);
+      setVisibleAircraft(inView);
+    } else {
+      setVisibleAircraft(allAircraft);
+    }
+  }, [allAircraft, trackingAllAircraft]);
+
+  // Keep a stable throttled handler reference for Cesium view-change notifications
+  useEffect(() => {
+    viewChangeHandlerRef.current = () => {
+      const rect = globeRef.current?.getViewRectangle();
+      if (rect) { viewRectRef.current = rect; updateVisibleAircraft(); }
+      const h = globeRef.current?.getCameraHeight();
+      if (typeof h === 'number') cameraHeightRef.current = h;
+      lastUserInteractionRef.current = Date.now();
+    };
+  }, [updateVisibleAircraft]);
+
+  const stableOnViewChange = React.useCallback(() => {
+    // debounce/trailing: run after 200ms of no further events
+    if (viewChangeThrottleRef.current.timeoutId) {
+      window.clearTimeout(viewChangeThrottleRef.current.timeoutId);
+    }
+    viewChangeThrottleRef.current.timeoutId = window.setTimeout(() => {
+      try { viewChangeHandlerRef.current(); } catch (e) { /* ignore */ }
+      viewChangeThrottleRef.current.timeoutId = null;
+    }, 200) as unknown as number;
+  }, []);
+
   const resetAllTrackingState = useCallback(() => {
     if (autoRefreshIntervalRef.current) { clearInterval(autoRefreshIntervalRef.current); autoRefreshIntervalRef.current = null; }
-    if (trackingInterval) { clearInterval(trackingInterval); setTrackingInterval(null); }
-    if (interpolationInterval) { clearInterval(interpolationInterval); setInterpolationInterval(null); }
-    if (distanceUpdateInterval) { clearInterval(distanceUpdateInterval); setDistanceUpdateInterval(null); }
-    if (distanceInterpolationInterval) { clearInterval(distanceInterpolationInterval); setDistanceInterpolationInterval(null); }
+    if (trackingIntervalRef.current) { clearInterval(trackingIntervalRef.current); trackingIntervalRef.current = null; }
+    if (interpolationIntervalRef.current) { clearInterval(interpolationIntervalRef.current); interpolationIntervalRef.current = null; }
+    if (distanceUpdateIntervalRef.current) { clearInterval(distanceUpdateIntervalRef.current); distanceUpdateIntervalRef.current = null; }
+    if (distanceInterpolationIntervalRef.current) { clearInterval(distanceInterpolationIntervalRef.current); distanceInterpolationIntervalRef.current = null; }
     setAircraftPosition(null); setAllAircraft([]); setTrackingAllAircraft(false); setFlightData(null); setLastKnownPosition(null);
     setDistance(null); setDisplayedDistance(null); setLastApiCall(null);
     // Clear globe markers
@@ -159,10 +185,23 @@ const FlightTracker: React.FC = () => {
     globeRef.current?.removeMarker('tracked-plane');
     globeRef.current?.removeMarker('user-location');
     sessionStorage.removeItem('lastApiCall');
-  }, [trackingInterval, interpolationInterval, distanceUpdateInterval, distanceInterpolationInterval]);
+  }, []);
 
   const clearAutoRefreshInterval = useCallback(() => {
     if (autoRefreshIntervalRef.current) { clearInterval(autoRefreshIntervalRef.current); autoRefreshIntervalRef.current = null; }
+  }, []);
+
+  // Start an auto-refresh interval only if network conditions are ok
+  const startAutoRefresh = useCallback((fn: () => void, ms: number) => {
+    // clear existing
+    if (autoRefreshIntervalRef.current) { clearInterval(autoRefreshIntervalRef.current); autoRefreshIntervalRef.current = null; }
+    try {
+      const connection = (navigator as any).connection;
+      if (connection?.saveData) return; // respect save-data
+      const effective = connection?.effectiveType || '';
+      if (effective.includes('2g')) return; // avoid heavy polling on slow networks
+    } catch (e) {}
+    autoRefreshIntervalRef.current = window.setInterval(fn, ms);
   }, []);
 
   const trackFlight = useCallback(async (forceRefresh: boolean = false) => {
@@ -170,11 +209,7 @@ const FlightTracker: React.FC = () => {
     if (!forceRefresh) { localStorage.setItem('lastFlightNumber', flightNumber); resetAllTrackingState(); } else { clearAutoRefreshInterval(); }
     setLoading(true); if (!forceRefresh) setError('');
     try {
-      const response = await fetch(`https://opensky-network.org/api/states/all?time=0&icao24=&callback=`);
-      if (!response.ok) throw new Error(`Failed to fetch flight data (${response.status})`);
-      const data = await response.json();
-      if (!data.states || data.states.length === 0) throw new Error('No state data received from API');
-      const flightState = data.states.find((state: any[]) => state[1] && state[1].trim().includes(flightNumber.toUpperCase()));
+      const flightState = await findStateByFlightNumber(flightNumber);
       if (!flightState) throw new Error('Flight not found in current tracking data');
       const longitude = flightState[5];
       const latitude = flightState[6];
@@ -202,25 +237,33 @@ const FlightTracker: React.FC = () => {
       if (followEnabled) {
         globeRef.current?.setView({ lat: newPosition.lat, lng: newPosition.lng, height: cameraHeightRef.current, pitchDeg: -85 });
       }
-      autoRefreshIntervalRef.current = setInterval(() => { trackFlight(true); }, 60000);
+      startAutoRefresh(() => { trackFlight(true); }, 60000);
     } catch (err) {
       setError('Error tracking flight: ' + (err instanceof Error ? err.message : 'Unknown error'));
       clearAutoRefreshInterval();
     } finally { setLoading(false); }
-  }, [flightNumber, resetAllTrackingState, clearAutoRefreshInterval, followEnabled]);
+  }, [flightNumber, resetAllTrackingState, clearAutoRefreshInterval, followEnabled, startAutoRefresh]);
+
+  // Auto-track flight and use saved location on mount
+  useEffect(() => {
+    const savedLocation = localStorage.getItem('lastLocation');
+    if (savedLocation) {
+      try { setLocation(JSON.parse(savedLocation)); } catch (e) { console.error('Error parsing saved location:', e); }
+    }
+    const savedFlightNumber = localStorage.getItem('lastFlightNumber');
+    if (savedFlightNumber) {
+      setFlightNumber(savedFlightNumber);
+      setTimeout(() => { trackFlight(false); }, 100);
+    }
+  }, [trackFlight]);
 
   const getAllAircraft = useCallback(async (isAutoRefresh: boolean = false) => {
     if (!isAutoRefresh) resetAllTrackingState(); else clearAutoRefreshInterval();
     setLoading(true); if (!isAutoRefresh) setError('');
     try {
-      const response = await fetch(`https://opensky-network.org/api/states/all?time=0&callback=`);
-      if (!response.ok) throw new Error(`Failed to fetch aircraft data (${response.status})`);
-      const data = await response.json();
-      if (!data.states || data.states.length === 0) { setAllAircraft([]); }
+      const aircraftData = await getAllAircraftData();
+      if (!aircraftData || aircraftData.length === 0) { setAllAircraft([]); }
       else {
-        const aircraftData: AllAircraftData[] = data.states
-          .filter((state: any[]) => state[5] && state[6] && !isNaN(state[5]) && !isNaN(state[6]) && !state[8])
-          .map((state: any[]) => ({ icao24: state[0], callsign: state[1]?.trim(), latitude: state[6], longitude: state[5], altitude: state[7] || 0, direction: state[10] || 0, speed: state[9] ? state[9] * 3.6 : 0, isOnGround: Boolean(state[8]) }));
         setAllAircraft(aircraftData);
         // Center globe on middle aircraft initially
         if (!isAutoRefresh && aircraftData.length > 0) {
@@ -229,13 +272,13 @@ const FlightTracker: React.FC = () => {
         }
       }
       const apiTimestamp = Date.now(); setLastApiCall(apiTimestamp); sessionStorage.setItem('lastApiCall', apiTimestamp.toString()); setError('');
-      autoRefreshIntervalRef.current = setInterval(() => { getAllAircraft(true); }, 60000);
+      startAutoRefresh(() => { getAllAircraft(true); }, 60000);
       setTrackingAllAircraft(true);
     } catch (err) {
       setError('Error fetching aircraft: ' + (err instanceof Error ? err.message : 'Unknown error'));
       setTrackingAllAircraft(false); clearAutoRefreshInterval();
     } finally { setLoading(false); }
-  }, [resetAllTrackingState, clearAutoRefreshInterval]);
+  }, [resetAllTrackingState, clearAutoRefreshInterval, startAutoRefresh]);
 
   const clearLocation = () => {
     setLocation(null); setSearchQuery(''); setError(''); setFlightNumber(''); resetAllTrackingState();
@@ -244,27 +287,16 @@ const FlightTracker: React.FC = () => {
 
   // Interpolation loop setup
   useEffect(() => {
-    if (interpolationInterval) { clearInterval(interpolationInterval); setInterpolationInterval(null); }
+    if (interpolationIntervalRef.current) { clearInterval(interpolationIntervalRef.current); interpolationIntervalRef.current = null; }
     if (flightData && lastKnownPosition && !trackingAllAircraft) {
       updateInterpolatedPosition();
-      const interpolation = setInterval(() => { updateInterpolatedPosition(); }, 5000);
-      setInterpolationInterval(interpolation);
+      const interpolation = window.setInterval(() => { updateInterpolatedPosition(); }, 5000);
+      interpolationIntervalRef.current = interpolation;
     }
-    return () => { if (interpolationInterval) clearInterval(interpolationInterval); };
+    return () => { if (interpolationIntervalRef.current) { clearInterval(interpolationIntervalRef.current); interpolationIntervalRef.current = null; } };
   }, [flightData, lastKnownPosition, trackingAllAircraft, updateInterpolatedPosition]);
 
-  // Update visible aircraft when view rectangle or all aircraft changes
-  const updateVisibleAircraft = useCallback(() => {
-    const rect = viewRectRef.current;
-    if (trackingAllAircraft && rect && allAircraft.length > 0) {
-      const inView = allAircraft.filter(a => a.latitude >= rect.south && a.latitude <= rect.north && a.longitude >= rect.west && a.longitude <= rect.east);
-      setVisibleAircraft(inView);
-    } else {
-      setVisibleAircraft(allAircraft);
-    }
-  }, [allAircraft, trackingAllAircraft]);
-
-  useEffect(() => { updateVisibleAircraft(); }, [allAircraft, trackingAllAircraft, updateVisibleAircraft]);
+  
 
   // Sync globe markers for all-aircraft mode
   useEffect(() => {
@@ -304,8 +336,8 @@ const FlightTracker: React.FC = () => {
           </div>
           <div className="w-full sm:flex-1 sm:min-w-[200px] flex gap-2">
             <input type="text" value={flightNumber} onChange={(e) => setFlightNumber(e.target.value.toUpperCase())} onKeyPress={(e) => e.key === 'Enter' && trackFlight()} placeholder="Enter flight number (e.g., BA123)" disabled={trackingAllAircraft} className={`flex-1 p-2 text-sm sm:text-base border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${isDarkMode ? 'bg-gray-700 text-white border-gray-600' : 'bg-white text-gray-900'} ${trackingAllAircraft ? 'opacity-50' : ''}`} />
-            <button onClick={(e) => trackFlight()} disabled={loading || !flightNumber.trim() || trackingAllAircraft} className={`px-2 sm:px-4 py-1 sm:py-2 text-xs sm:text-sm bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-purple-300 whitespace-nowrap ${trackingAllAircraft ? 'opacity-50' : ''}`}>Track</button>
-            <button onClick={(e) => getAllAircraft(false)} disabled={loading || trackingAllAircraft} className="px-2 sm:px-4 py-1 sm:py-2 text-xs sm:text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-green-300 whitespace-nowrap">All Aircraft</button>
+            <button onClick={(e) => trackFlight()} disabled={loading || !flightNumber.trim() || trackingAllAircraft} className={`px-2 sm:px-4 py-1 sm:py-2 text-xs sm:text-sm bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-purple-300 whitespace-nowrap ${trackingAllAircraft ? 'opacity-50' : ''}`}>{loading ? 'Working...' : 'Track'}</button>
+            <button onClick={(e) => getAllAircraft(false)} disabled={loading || trackingAllAircraft} className="px-2 sm:px-4 py-1 sm:py-2 text-xs sm:text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-green-300 whitespace-nowrap">{loading ? 'Loading' : 'All Aircraft'}</button>
           </div>
           <div className="flex gap-2 items-center">
             {(location || trackingAllAircraft) && (<button onClick={clearLocation} disabled={loading} className="px-2 sm:px-4 py-1 sm:py-2 text-xs sm:text-sm bg-red-600 text-white rounded hover:bg-red-700 disabled:bg-red-300 whitespace-nowrap">Clear</button>)}
@@ -319,11 +351,11 @@ const FlightTracker: React.FC = () => {
         {error && (<div className={`p-2 sm:p-3 rounded text-xs sm:text-sm ${isDarkMode ? 'bg-red-900 text-red-100' : 'bg-red-100 text-red-700'}`}>{error}</div>)}
 
         {flightData && (
-          <div className={`p-2 sm:p-4 rounded ${isDarkMode ? 'bg-blue-900 text-blue-100' : 'bg-blue-100 text-blue-700'}`}>
+          <div className={`p-2 sm:p-4 rounded`} style={{ backgroundColor: isDarkMode ? theme.primary.dark : theme.primary.light, color: isDarkMode ? theme.text.muted : theme.text.primary }}>
             <div className="flex justify-between items-center mb-2 sm:mb-3"><div className="font-medium text-base sm:text-lg">{flightData.flight.number}</div></div>
             {displayedDistance !== null && (
               <div className="text-center">
-                <div className={`text-xs sm:text-sm font-medium mb-1 ${isDarkMode ? 'text-blue-200' : 'text-blue-800'}`}>Distance to Aircraft</div>
+                <div className={`text-xs sm:text-sm font-medium mb-1`} style={{ color: isDarkMode ? theme.primary.light : theme.primary.dark }}>Distance to Aircraft</div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 items-center gap-1 sm:gap-2 px-4 sm:px-0">
                   <div className="font-mono text-lg sm:text-2xl font-bold order-2 sm:order-none sm:text-right">{bananasToNauticalMiles(metersToBananas(displayedDistance)).toFixed(2)}nm</div>
                   <div className="font-mono text-lg sm:text-2xl font-bold order-1 sm:order-none text-center">{Math.round(displayedDistance).toLocaleString()}m</div>
@@ -346,7 +378,7 @@ const FlightTracker: React.FC = () => {
         )}
 
         {trackingAllAircraft && (
-          <div className={`p-2 sm:p-4 rounded ${isDarkMode ? 'bg-green-900 text-green-100' : 'bg-green-100 text-green-700'}`}>
+          <div className={`p-2 sm:p-4 rounded`} style={{ backgroundColor: isDarkMode ? theme.accent.success : '#d1fae5', color: isDarkMode ? theme.text.primary : theme.text.primary }}>
             <div className="flex justify-between items-center mb-1 sm:mb-3"><div className="font-medium text-base sm:text-lg">All Aircraft</div><div className="text-xs sm:text-sm font-mono">{visibleAircraft.length} visible / {allAircraft.length} total</div></div>
             <div className={`text-[10px] sm:text-xs mt-1 sm:mt-2 text-center ${isDarkMode ? 'text-green-300' : 'text-green-600'}`}>Using API data from {lastApiCall ? new Date(lastApiCall).toLocaleString() : 'N/A'}<br /><span className="italic">Auto-refreshes every minute, this use a lot of data so recommend using this feature with wifi only</span></div>
           </div>
@@ -358,13 +390,7 @@ const FlightTracker: React.FC = () => {
           ref={globeRef as any}
           isDarkMode={isDarkMode}
           initialCenter={{ lat: location?.lat ?? 51.505, lng: location?.lng ?? -0.09, height: 3_000_000 }}
-          onViewChange={() => {
-            const rect = globeRef.current?.getViewRectangle();
-            if (rect) { viewRectRef.current = rect; updateVisibleAircraft(); }
-            const h = globeRef.current?.getCameraHeight();
-            if (typeof h === 'number') cameraHeightRef.current = h;
-            lastUserInteractionRef.current = Date.now();
-          }}
+          onViewChange={stableOnViewChange}
         />
       </div>
     </div>

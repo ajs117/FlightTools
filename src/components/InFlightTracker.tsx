@@ -24,7 +24,7 @@ const MIN_TILE_ZOOM = 0;
 const MAX_TILE_ZOOM = 4;
 
 const InFlightTracker: React.FC = () => {
-  const { isDarkMode } = useTheme();
+  const { isDarkMode, theme } = useTheme();
   const [flightData, setFlightData] = useState<FlightData>({ latitude: null, longitude: null, altitude: null, speed: null, heading: null, lastUpdate: new Date(), gpsAccuracy: null });
   const [error, setError] = useState<string | null>(null);
   const [isGpsAvailable, setIsGpsAvailable] = useState<boolean>(true);
@@ -79,7 +79,7 @@ const InFlightTracker: React.FC = () => {
               globeRef.current.upsertMarker({ id: 'plane', lat: newData.latitude, lng: newData.longitude, image: planeIcon, size: 16, rotationDeg: newData.heading ?? 0 });
               // Update accuracy ellipse
               if (newData.gpsAccuracy) {
-                globeRef.current.upsertEllipse({ id: 'accuracy', lat: newData.latitude, lng: newData.longitude, radiusMeters: newData.gpsAccuracy, colorCss: isDarkMode ? '#60a5fa' : '#3b82f6', fillAlpha: 0.2, outline: true });
+                globeRef.current.upsertEllipse({ id: 'accuracy', lat: newData.latitude, lng: newData.longitude, radiusMeters: newData.gpsAccuracy, colorCss: isDarkMode ? theme.primary.light : theme.primary.main, fillAlpha: 0.2, outline: true });
               }
               // Maintain user zoom
               const currentHeight = Math.max(MIN_ZOOM_DISTANCE_METERS, Math.min(MAX_ZOOM_DISTANCE_METERS, cameraHeightRef.current));
@@ -94,7 +94,7 @@ const InFlightTracker: React.FC = () => {
               const newData = { latitude: coords.latitude, longitude: coords.longitude, altitude: coords.altitude, speed: coords.speed, heading: coords.heading, lastUpdate: new Date(), gpsAccuracy: coords.accuracy };
               setFlightData(newData);
               globeRef.current.upsertMarker({ id: 'plane', lat: newData.latitude!, lng: newData.longitude!, image: planeIcon, size: 16, rotationDeg: newData.heading ?? 0 });
-              if (newData.gpsAccuracy) globeRef.current.upsertEllipse({ id: 'accuracy', lat: newData.latitude!, lng: newData.longitude!, radiusMeters: newData.gpsAccuracy, colorCss: isDarkMode ? '#60a5fa' : '#3b82f6', fillAlpha: 0.2, outline: true });
+              if (newData.gpsAccuracy) globeRef.current.upsertEllipse({ id: 'accuracy', lat: newData.latitude!, lng: newData.longitude!, radiusMeters: newData.gpsAccuracy, colorCss: isDarkMode ? theme.primary.light : theme.primary.main, fillAlpha: 0.2, outline: true });
             }
           },
           { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
@@ -108,7 +108,7 @@ const InFlightTracker: React.FC = () => {
     return () => {
       if (watchId.current !== null) navigator.geolocation.clearWatch(watchId.current);
     };
-  }, [isDarkMode, precacheTiles]);
+  }, [isDarkMode, precacheTiles, theme]);
 
   return (
     <div className={`p-4 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>

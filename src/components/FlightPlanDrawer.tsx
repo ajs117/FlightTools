@@ -4,7 +4,7 @@ import CesiumGlobe, { CesiumGlobeRef } from './common/CesiumGlobe';
 import { Waypoint } from '../models';
 
 const FlightPlanDrawer: React.FC = () => {
-  const { isDarkMode } = useTheme();
+  const { isDarkMode, theme } = useTheme();
   const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
   const [isDrawingEnabled, setIsDrawingEnabled] = useState(true);
   const [selectedWaypoint, setSelectedWaypoint] = useState<Waypoint | null>(null);
@@ -12,7 +12,7 @@ const FlightPlanDrawer: React.FC = () => {
   const [waypointType, setWaypointType] = useState<'airport' | 'waypoint'>('waypoint');
   const globeRef = useRef<CesiumGlobeRef | null>(null);
 
-  const regenerateGraphics = () => {
+  const regenerateGraphics = React.useCallback(() => {
     if (!globeRef.current) return;
     // Clear existing
     // Recreate polyline
@@ -20,7 +20,7 @@ const FlightPlanDrawer: React.FC = () => {
       globeRef.current.upsertPolyline({
         id: 'route',
         positions: waypoints.map(w => ({ lat: w.lat, lng: w.lng })),
-        colorCss: isDarkMode ? '#60A5FA' : '#2563EB',
+        colorCss: isDarkMode ? theme.primary.light : theme.primary.dark,
         width: 3,
       });
     } else {
@@ -36,11 +36,11 @@ const FlightPlanDrawer: React.FC = () => {
         size: 16,
       });
     });
-  };
+  }, [waypoints, isDarkMode, theme]);
 
   useEffect(() => {
     regenerateGraphics();
-  }, [waypoints, isDarkMode]);
+  }, [regenerateGraphics]);
 
   const handleMapClick = (lat: number, lng: number) => {
     if (!isDrawingEnabled) return;

@@ -1,43 +1,59 @@
 {
   "name": "flighttools",
-  "version": "0.1.0",
+  "version": "0.9.1",
   "private": true,
   "homepage": "https://ajs117.github.io/FlightTools/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ajs117/FlightTools.git"
+  },
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
-    "@joergdietrich/leaflet.terminator": "^1.1.0",
     "@mui/material": "^6.4.6",
     "aircodes": "^1.3.16",
     "airport-timezone": "^1.1.1",
     "cesium": "^1.117.0",
-    "leaflet": "^1.9.4",
-    "leaflet.offline": "^3.1.0",
+    "date-fns": "^2.30.0",
+    "date-fns-tz": "^1.3.7",
     "lucide-react": "^0.477.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-leaflet": "^5.0.0",
-    "react-scripts": "^5.0.1",
-          "web-vitals": "^2.1.4"
-    },
-    "devDependencies": {
+    
+    "web-vitals": "^2.1.4"
+  },
+  "devDependencies": {
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.2.0",
     "@testing-library/user-event": "^13.5.0",
-    "@types/leaflet": "^1.9.16",
     "@types/react": "^19.0.10",
+    "@typescript-eslint/eslint-plugin": "^5.62.0",
+    "@typescript-eslint/parser": "^5.62.0",
+    "eslint": "^8.57.1",
+    "eslint-config-react-app": "^7.0.1",
+    "eslint-plugin-import": "^2.27.5",
+    "eslint-plugin-jsx-a11y": "^6.7.1",
+    "eslint-plugin-react": "^7.32.2",
+    "eslint-plugin-react-hooks": "^4.6.0",
     "gh-pages": "^6.3.0",
     "tailwindcss": "^3.4.17",
-    "typescript": "^4.9.5"
+    "typescript": "^4.9.5",
+    "vite": "^5.0.0",
+    "@vitejs/plugin-react": "^4.0.0",
+    "vitest": "^1.3.5",
+    "jsdom": "^21.1.0"
   },
   "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build",
-    "test": "react-scripts test",
-    "eject": "react-scripts eject",
+    "start": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "eject": "",
     "predeploy": "npm run build",
-    "deploy": "gh-pages -d build"
+    "deploy": "gh-pages -d build -r https://github.com/ajs117/FlightTools.git",
+    "type-check": "tsc --noEmit",
+    "quality-gate": "npx eslint \"src/**/*.{js,jsx,ts,tsx}\" --max-warnings=0 && npm run type-check && npm run build && npm test"
   },
   "eslintConfig": {
     "extends": [
