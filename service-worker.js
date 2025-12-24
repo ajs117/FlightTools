@@ -53,11 +53,37 @@ async function precacheAssetsFromHtml(htmlText) {
   }
 }
 
-// Install - cache app shell
+// Install - cache app shell and try to prefetch build manifest entries (dynamic chunks)
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(OFFLINE_URLS))
-  );
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    await cache.addAll(OFFLINE_URLS).catch(() => {});
+
+    // Try to fetch an asset manifest next to index.html (created by the build)
+    // and cache any files it lists (this helps dynamic import chunks be available offline).
+    try {
+      const manifestUrl = scopeUrl('./asset-manifest.json');
+      const resp = await fetch(manifestUrl);
+      if (resp && resp.ok) {
+        const manifest = await resp.json();
+        const files = manifest && manifest.files ? Object.values(manifest.files) : [];
+        await Promise.all(
+          files
+            .filter(u => typeof u === 'string')
+            .map(u => {
+              try {
+                const absolute = new URL(u, self.location.origin).toString();
+                return cache.add(absolute).catch(() => {});
+              } catch (e) {
+                return Promise.resolve();
+              }
+            })
+        );
+      }
+    } catch (e) {
+      // ignore manifest fetch/cache failures
+    }
+  })());
   self.skipWaiting();
 });
 
