@@ -1,12 +1,20 @@
-const CACHE_NAME = 'flight-tools-cache-v1';
-const TILES_CACHE = 'flight-tools-tiles-v1';
+// IMPORTANT:
+// This service worker must be scope-aware (GitHub Pages uses a subpath)
+// and must not permanently serve a cached index.html, otherwise new builds
+// (and fixes like Cesium changes) will never load.
+const CACHE_NAME = 'flight-tools-cache-v2';
+const TILES_CACHE = 'flight-tools-tiles-v2';
+
+const scopeUrl = (path) => new URL(path, self.registration.scope).toString();
+
+// Cache the app shell relative to the SW scope.
 const OFFLINE_URLS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/favicon.ico',
-  '/logo192.png',
-  '/logo512.png'
+  scopeUrl('./'),
+  scopeUrl('./index.html'),
+  scopeUrl('./manifest.json'),
+  scopeUrl('./favicon.ico'),
+  scopeUrl('./logo192.png'),
+  scopeUrl('./logo512.png')
 ];
 
 const ALLOWED_CROSS_ORIGIN_HOSTS = new Set([
@@ -62,10 +70,22 @@ self.addEventListener('fetch', (event) => {
   const isNavigation = event.request.mode === 'navigate' || (event.request.headers.get('accept') || '').includes('text/html');
   const isAllowedCrossOrigin = ALLOWED_CROSS_ORIGIN_HOSTS.has(requestUrl.hostname);
 
-  // Serve app shell for navigation requests
+  // Navigation requests: network-first, fallback to cached shell.
+  // This prevents "stuck" deployments where index.html never updates.
   if (isNavigation && isSameOrigin) {
+    const shellUrl = scopeUrl('./index.html');
     event.respondWith(
-      caches.match('/index.html').then((cached) => cached || fetch(event.request).catch(() => caches.match('/index.html')))
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.ok) {
+            // Cache the navigation response (usually index.html under the scope)
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, networkResponse.clone()));
+          }
+          return networkResponse;
+        })
+        .catch(() =>
+          caches.match(event.request).then((cached) => cached || caches.match(shellUrl))
+        )
     );
     return;
   }
