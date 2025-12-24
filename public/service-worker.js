@@ -1,12 +1,20 @@
-const CACHE_NAME = 'flight-tools-cache-v1';
-const TILES_CACHE = 'flight-tools-tiles-v1';
+// IMPORTANT:
+// This service worker must be scope-aware (GitHub Pages uses a subpath)
+// and must not permanently serve a cached index.html, otherwise new builds
+// (and fixes like Cesium changes) will never load.
+const CACHE_NAME = 'flight-tools-cache-v2';
+const TILES_CACHE = 'flight-tools-tiles-v2';
+
+const scopeUrl = (path) => new URL(path, self.registration.scope).toString();
+
+// Cache the app shell relative to the SW scope.
 const OFFLINE_URLS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/favicon.ico',
-  '/logo192.png',
-  '/logo512.png'
+  scopeUrl('./'),
+  scopeUrl('./index.html'),
+  scopeUrl('./manifest.json'),
+  scopeUrl('./favicon.ico'),
+  scopeUrl('./logo192.png'),
+  scopeUrl('./logo512.png')
 ];
 
 const ALLOWED_CROSS_ORIGIN_HOSTS = new Set([
@@ -31,11 +39,51 @@ async function trimCache(cacheName, maxEntries) {
   }
 }
 
-// Install - cache app shell
+async function precacheAssetsFromHtml(htmlText) {
+  try {
+    const cache = await caches.open(CACHE_NAME);
+    const matches = [...htmlText.matchAll(/\b(?:src|href)="([^"]+)"/g)].map(m => m[1]);
+    const assetUrls = matches
+      .filter(u => typeof u === 'string')
+      .filter(u => u.includes('/assets/') && (u.endsWith('.js') || u.endsWith('.css')))
+      .map(u => new URL(u, self.location.origin).toString());
+    await Promise.all(assetUrls.map(u => cache.add(u).catch(() => {})));
+  } catch (_) {
+    // ignore
+  }
+}
+
+// Install - cache app shell and try to prefetch build manifest entries (dynamic chunks)
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(OFFLINE_URLS))
-  );
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    await cache.addAll(OFFLINE_URLS).catch(() => {});
+
+    // Try to fetch an asset manifest next to index.html (created by the build)
+    // and cache any files it lists (this helps dynamic import chunks be available offline).
+    try {
+      const manifestUrl = scopeUrl('./asset-manifest.json');
+      const resp = await fetch(manifestUrl);
+      if (resp && resp.ok) {
+        const manifest = await resp.json();
+        const files = manifest && manifest.files ? Object.values(manifest.files) : [];
+        await Promise.all(
+          files
+            .filter(u => typeof u === 'string')
+            .map(u => {
+              try {
+                const absolute = new URL(u, self.location.origin).toString();
+                return cache.add(absolute).catch(() => {});
+              } catch (e) {
+                return Promise.resolve();
+              }
+            })
+        );
+      }
+    } catch (e) {
+      // ignore manifest fetch/cache failures
+    }
+  })());
   self.skipWaiting();
 });
 
@@ -62,10 +110,24 @@ self.addEventListener('fetch', (event) => {
   const isNavigation = event.request.mode === 'navigate' || (event.request.headers.get('accept') || '').includes('text/html');
   const isAllowedCrossOrigin = ALLOWED_CROSS_ORIGIN_HOSTS.has(requestUrl.hostname);
 
-  // Serve app shell for navigation requests
+  // Navigation requests: network-first, fallback to cached shell.
+  // This prevents "stuck" deployments where index.html never updates.
   if (isNavigation && isSameOrigin) {
+    const shellUrl = scopeUrl('./index.html');
     event.respondWith(
-      caches.match('/index.html').then((cached) => cached || fetch(event.request).catch(() => caches.match('/index.html')))
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.ok) {
+            // Cache the navigation response (usually index.html under the scope)
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, networkResponse.clone()));
+            // Also cache referenced hashed assets so offline reload works after first online visit
+            networkResponse.clone().text().then(precacheAssetsFromHtml).catch(() => {});
+          }
+          return networkResponse;
+        })
+        .catch(() =>
+          caches.match(event.request).then((cached) => cached || caches.match(shellUrl))
+        )
     );
     return;
   }
@@ -80,7 +142,7 @@ self.addEventListener('fetch', (event) => {
           }
           return networkResponse;
         }).catch(() => null);
-        return cached || networkFetch;
+        return cached || networkFetch || new Response('', { status: 504, statusText: 'Offline' });
       })
     );
     return;

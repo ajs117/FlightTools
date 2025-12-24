@@ -14,12 +14,21 @@ root.render(
   </React.StrictMode>
 );
 
-// In your index.js or App.js
+// Service worker:
+// - Register only in production builds
+// - Unregister in dev to prevent stubborn caching during development
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-      try {
-        const publicUrl = (import.meta && import.meta.env && import.meta.env.BASE_URL) || '';
-        const swUrl = `${publicUrl}service-worker.js`;
+    const isProd = Boolean(import.meta?.env?.PROD);
+    const publicUrl = (import.meta && import.meta.env && import.meta.env.BASE_URL) || '';
+    const swUrl = `${publicUrl}service-worker.js`;
+
+    if (!isProd) {
+      navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister())).catch(() => {});
+      return;
+    }
+
+    try {
       navigator.serviceWorker.register(swUrl)
         .then(registration => {
           console.log('Service Worker registered with scope:', registration.scope);

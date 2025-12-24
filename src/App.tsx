@@ -1,12 +1,11 @@
-import React, { useState, Suspense, lazy } from 'react';
+import React, { useState } from 'react';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { useNetworkStatus } from './hooks/useNetworkStatus';
 
-// Lazy load components
-const InFlightTracker = lazy(() => import('./components/InFlightTracker'));
-const FlightCalculator = lazy(() => import('./components/FlightCalculator'));
-const FlightTracker = lazy(() => import('./components/FlightTracker'));
-const FlightPlanDrawer = lazy(() => import('./components/FlightPlanDrawer'));
+import InFlightTracker from './components/InFlightTracker';
+import FlightCalculator from './components/FlightCalculator';
+import FlightTracker from './components/FlightTracker';
+import FlightPlanDrawer from './components/FlightPlanDrawer';
 
 const AppContent: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string | null>(null);
@@ -247,33 +246,31 @@ const AppContent: React.FC = () => {
             This feature requires an internet connection. Please connect to the internet to use this tool.
           </div>
         )}
-        <Suspense fallback={<div className={`text-center py-6 sm:py-10 ${isDarkMode ? 'text-white' : 'text-gray-800'}`} style={{ color: theme.text.primary }}>Loading...</div>}>
-          {activeTab === 'calculator' && !isOnline && (
-            <div className={`p-6 rounded-lg text-center ${isDarkMode ? 'bg-gray-800 text-yellow-400' : 'bg-white text-yellow-600'}`}>
-              <div className="text-5xl mb-4">📡</div>
-              <h3 className="text-xl font-bold mb-2">Internet Connection Required</h3>
-              <p>The Flight Calculator requires an internet connection to function. Please connect to the internet and try again.</p>
-            </div>
-          )}
-          {activeTab === 'tracker' && !isOnline && (
-            <div className={`p-6 rounded-lg text-center ${isDarkMode ? 'bg-gray-800 text-yellow-400' : 'bg-white text-yellow-600'}`}>
-              <div className="text-5xl mb-4">📡</div>
-              <h3 className="text-xl font-bold mb-2">Internet Connection Required</h3>
-              <p>The Flight Tracker requires an internet connection to function. Please connect to the internet and try again.</p>
-            </div>
-          )}
-          {activeTab === 'drawer' && !isOnline && (
-            <div className={`p-6 rounded-lg text-center ${isDarkMode ? 'bg-gray-800 text-yellow-400' : 'bg-white text-yellow-600'}`}>
-              <div className="text-5xl mb-4">📡</div>
-              <h3 className="text-xl font-bold mb-2">Internet Connection Required</h3>
-              <p>The Flight Plan Drawer requires an internet connection to function. Please connect to the internet and try again.</p>
-            </div>
-          )}
-          {activeTab === 'calculator' && isOnline && <FlightCalculator key={`calculator-${isOnline}`} />}
-          {activeTab === 'tracker' && isOnline && <FlightTracker key={`tracker-${isOnline}`} />}
-          {activeTab === 'drawer' && isOnline && <FlightPlanDrawer key={`drawer-${isOnline}`} />}
-          {activeTab === 'inflight' && <InFlightTracker key="inflight" />}
-        </Suspense>
+        {activeTab === 'calculator' && !isOnline && (
+          <div className={`p-6 rounded-lg text-center ${isDarkMode ? 'bg-gray-800 text-yellow-400' : 'bg-white text-yellow-600'}`}>
+            <div className="text-5xl mb-4">📡</div>
+            <h3 className="text-xl font-bold mb-2">Internet Connection Required</h3>
+            <p>The Flight Calculator requires an internet connection to function. Please connect to the internet and try again.</p>
+          </div>
+        )}
+        {activeTab === 'tracker' && !isOnline && (
+          <div className={`p-6 rounded-lg text-center ${isDarkMode ? 'bg-gray-800 text-yellow-400' : 'bg-white text-yellow-600'}`}>
+            <div className="text-5xl mb-4">📡</div>
+            <h3 className="text-xl font-bold mb-2">Internet Connection Required</h3>
+            <p>The Flight Tracker requires an internet connection to function. Please connect to the internet and try again.</p>
+          </div>
+        )}
+        {activeTab === 'drawer' && !isOnline && (
+          <div className={`p-6 rounded-lg text-center ${isDarkMode ? 'bg-gray-800 text-yellow-400' : 'bg-white text-yellow-600'}`}>
+            <div className="text-5xl mb-4">📡</div>
+            <h3 className="text-xl font-bold mb-2">Internet Connection Required</h3>
+            <p>The Flight Plan Drawer requires an internet connection to function. Please connect to the internet and try again.</p>
+          </div>
+        )}
+        {activeTab === 'calculator' && isOnline && <FlightCalculator key={`calculator-${isOnline}`} />}
+        {activeTab === 'tracker' && isOnline && <FlightTracker key={`tracker-${isOnline}`} />}
+        {activeTab === 'drawer' && isOnline && <FlightPlanDrawer key={`drawer-${isOnline}`} />}
+        {activeTab === 'inflight' && <InFlightTracker key="inflight" />}
       </div>
     </div>
   );

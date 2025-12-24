@@ -6,6 +6,13 @@ import { AllAircraftData, FlightData, InterpolatedPosition, Location } from '../
 import { getAllAircraftData, findStateByFlightNumber } from '../services/opensky';
 import { bananasToMeters, bananasToNauticalMiles, calculateInterpolatedPosition, haversineDistanceMeters, kmhToKnots, metersToBananas, metersToFeet } from '../utils/geo';
 
+const USER_LOCATION_VIEW_HEIGHT = 800000;
+const userLocationIcon = planeIcon;
+
+const USER_MARKER_SIZE_PX = 24;
+const TRACKED_PLANE_MARKER_SIZE_PX = 24;
+const AIRCRAFT_MARKER_SIZE_PX = 18;
+
 const FlightTracker: React.FC = () => {
   const { isDarkMode, theme } = useTheme();
   const [location, setLocation] = useState<Location | null>(null);
@@ -34,6 +41,7 @@ const FlightTracker: React.FC = () => {
   const cameraHeightRef = useRef<number>(400000);
   const activeMarkerIdsRef = useRef<Set<string>>(new Set());
   const lastUserInteractionRef = useRef<number>(0);
+  const autoLocationAttemptedRef = useRef(false);
   // Throttling refs for view-change handling
   const viewChangeHandlerRef = useRef<() => void>(() => {});
   const viewChangeThrottleRef = useRef<{ timeoutId: number | null }>({ timeoutId: null });
@@ -86,17 +94,35 @@ const FlightTracker: React.FC = () => {
   }, [location, aircraftPosition, flightData, lastKnownPosition]);
 
   // Animate distance display
-  useEffect(() => {
-    if (distance === null || displayedDistance === null) { setDisplayedDistance(distance); return; }
-    const diff = metersToBananas(distance) - metersToBananas(displayedDistance);
-    if (Math.abs(diff) < 1) { setDisplayedDistance(distance); return; }
-    const step = Math.sign(diff) * Math.min(Math.abs(diff), Math.max(1, Math.abs(diff) / 5));
-    const timer = setTimeout(() => { setDisplayedDistance(prev => (prev !== null ? bananasToMeters(metersToBananas(prev) + step) : null)); }, 16);
-    return () => clearTimeout(timer);
-  }, [distance, displayedDistance]);
+  const displayedDistanceRef = useRef<number | null>(displayedDistance);
+  useEffect(() => { displayedDistanceRef.current = displayedDistance; }, [displayedDistance]);
 
-  const getCurrentLocation = () => {
-    setLoading(true); setError('');
+  // Animate displayedDistance towards `distance` using RAF; depend only on `distance` to avoid loops.
+  useEffect(() => {
+    let rafId: number | null = null;
+    if (distance === null) { setDisplayedDistance(null); return; }
+
+    const tick = () => {
+      const current = displayedDistanceRef.current ?? distance;
+      const diff = metersToBananas(distance) - metersToBananas(current);
+      if (Math.abs(diff) < 1) {
+        setDisplayedDistance(distance);
+        displayedDistanceRef.current = distance;
+        return;
+      }
+      const step = Math.sign(diff) * Math.min(Math.abs(diff), Math.max(1, Math.abs(diff) / 5));
+      const next = bananasToMeters(metersToBananas(current) + step);
+      setDisplayedDistance(next);
+      displayedDistanceRef.current = next;
+      rafId = window.requestAnimationFrame(tick);
+    };
+    rafId = window.requestAnimationFrame(tick);
+    return () => { if (rafId !== null) window.cancelAnimationFrame(rafId); };
+  }, [distance]);
+
+  const getCurrentLocation = useCallback(() => {
+    setLoading(true);
+    setError('');
     if (!navigator.geolocation) { setError('Geolocation is not supported by your browser'); setLoading(false); return; }
     navigator.geolocation.getCurrentPosition(
       (position) => {
@@ -104,12 +130,12 @@ const FlightTracker: React.FC = () => {
         setLocation(newLoc);
         setAircraftPosition(null);
         // Center globe
-        globeRef.current?.setView({ lat: newLoc.lat, lng: newLoc.lng, height: 800000, pitchDeg: -85 });
+        globeRef.current?.setView({ lat: newLoc.lat, lng: newLoc.lng, height: USER_LOCATION_VIEW_HEIGHT, pitchDeg: -85 });
         setLoading(false);
       },
       (error) => { setError('Error getting location: ' + error.message); setLoading(false); }
     );
-  };
+  }, []);
 
   const searchLocation = async () => {
     if (!searchQuery.trim()) return;
@@ -127,6 +153,31 @@ const FlightTracker: React.FC = () => {
       setError('Error searching location: ' + (err instanceof Error ? err.message : 'Unknown error'));
     } finally { setLoading(false); }
   };
+
+  useEffect(() => {
+    if (!location) {
+      globeRef.current?.removeMarker('user-location');
+      return;
+    }
+    let frameId: number | null = null;
+    const applyLocation = () => {
+      const viewer = globeRef.current;
+      if (!viewer) return false;
+      viewer.setView({ lat: location.lat, lng: location.lng, height: USER_LOCATION_VIEW_HEIGHT, pitchDeg: -85 });
+      viewer.upsertMarker({ id: 'user-location', lat: location.lat, lng: location.lng, image: userLocationIcon, size: USER_MARKER_SIZE_PX, scaleWithDistance: false });
+      return true;
+    };
+    if (!applyLocation()) {
+      const loop = () => {
+        if (applyLocation()) return;
+        frameId = window.requestAnimationFrame(loop);
+      };
+      frameId = window.requestAnimationFrame(loop);
+    }
+    return () => {
+      if (frameId !== null) window.cancelAnimationFrame(frameId);
+    };
+  }, [location]);
 
   const updateInterpolatedPosition = useCallback(() => {
     if (flightData?.live && lastKnownPosition) {
@@ -183,7 +234,6 @@ const FlightTracker: React.FC = () => {
     activeMarkerIdsRef.current.forEach(id => globeRef.current?.removeMarker(id));
     activeMarkerIdsRef.current.clear();
     globeRef.current?.removeMarker('tracked-plane');
-    globeRef.current?.removeMarker('user-location');
     sessionStorage.removeItem('lastApiCall');
   }, []);
 
@@ -231,11 +281,11 @@ const FlightTracker: React.FC = () => {
       const newPosition = { lat: flight.live.latitude, lng: flight.live.longitude, name: `${flight.airline.name} ${flight.flight.number}`, timestamp: apiTimestamp };
       setLastKnownPosition(newPosition);
       setAircraftPosition({ lat: newPosition.lat, lng: newPosition.lng, name: newPosition.name });
-      // Update globe
-      globeRef.current?.upsertMarker({ id: 'tracked-plane', lat: newPosition.lat, lng: newPosition.lng, image: planeIcon, size: 16, rotationDeg: heading || 0 });
+      // Update globe: match FlightCalculator marker size and keep it readable at any zoom
+      globeRef.current?.upsertMarker({ id: 'tracked-plane', lat: newPosition.lat, lng: newPosition.lng, image: planeIcon, size: TRACKED_PLANE_MARKER_SIZE_PX, rotationDeg: heading || 0, scaleWithDistance: false });
       // Keep map north-up on initial track; center without rotating camera (respect follow)
       if (followEnabled) {
-        globeRef.current?.setView({ lat: newPosition.lat, lng: newPosition.lng, height: cameraHeightRef.current, pitchDeg: -85 });
+        globeRef.current?.setView({ lat: newPosition.lat, lng: newPosition.lng, pitchDeg: -85 });
       }
       startAutoRefresh(() => { trackFlight(true); }, 60000);
     } catch (err) {
@@ -247,15 +297,19 @@ const FlightTracker: React.FC = () => {
   // Auto-track flight and use saved location on mount
   useEffect(() => {
     const savedLocation = localStorage.getItem('lastLocation');
+    try { globeRef.current?.setTime(null); } catch (e) { /* ignore if globe not ready */ }
     if (savedLocation) {
       try { setLocation(JSON.parse(savedLocation)); } catch (e) { console.error('Error parsing saved location:', e); }
+    } else if (!autoLocationAttemptedRef.current) {
+      autoLocationAttemptedRef.current = true;
+      getCurrentLocation();
     }
     const savedFlightNumber = localStorage.getItem('lastFlightNumber');
     if (savedFlightNumber) {
       setFlightNumber(savedFlightNumber);
       setTimeout(() => { trackFlight(false); }, 100);
     }
-  }, [trackFlight]);
+  }, [trackFlight, getCurrentLocation]);
 
   const getAllAircraft = useCallback(async (isAutoRefresh: boolean = false) => {
     if (!isAutoRefresh) resetAllTrackingState(); else clearAutoRefreshInterval();
@@ -305,7 +359,7 @@ const FlightTracker: React.FC = () => {
     visibleAircraft.forEach(ac => {
       const id = `ac-${ac.icao24}`;
       newIds.add(id);
-      globeRef.current!.upsertMarker({ id, lat: ac.latitude, lng: ac.longitude, image: planeIcon, size: 12, rotationDeg: ac.direction });
+      globeRef.current!.upsertMarker({ id, lat: ac.latitude, lng: ac.longitude, image: planeIcon, size: AIRCRAFT_MARKER_SIZE_PX, rotationDeg: ac.direction, scaleWithDistance: false });
     });
     // Remove markers that are no longer visible
     activeMarkerIdsRef.current.forEach(id => { if (!newIds.has(id)) globeRef.current?.removeMarker(id); });
@@ -315,12 +369,14 @@ const FlightTracker: React.FC = () => {
   // Update tracked plane marker and view
   useEffect(() => {
     if (!trackingAllAircraft && aircraftPosition && flightData && globeRef.current) {
-      globeRef.current.upsertMarker({ id: 'tracked-plane', lat: aircraftPosition.lat, lng: aircraftPosition.lng, image: planeIcon, size: 16, rotationDeg: flightData.live.direction || 0 });
+      // Use same drawing/size as FlightCalculator for consistency
+      globeRef.current.upsertMarker({ id: 'tracked-plane', lat: aircraftPosition.lat, lng: aircraftPosition.lng, image: planeIcon, size: TRACKED_PLANE_MARKER_SIZE_PX, rotationDeg: flightData.live.direction || 0, scaleWithDistance: false });
       const now = Date.now();
       // Give the user more time to interact before recentering
       const quietMs = 2500;
       if (followEnabled && now - lastUserInteractionRef.current > quietMs) {
-        globeRef.current.setView({ lat: aircraftPosition.lat, lng: aircraftPosition.lng, height: cameraHeightRef.current, pitchDeg: -85 });
+        // Preserve current zoom/height by not specifying `height` so CesiumGlobe will keep camera height
+        globeRef.current.setView({ lat: aircraftPosition.lat, lng: aircraftPosition.lng, pitchDeg: -85 });
       }
     }
   }, [aircraftPosition, flightData, trackingAllAircraft, followEnabled]);
@@ -390,6 +446,7 @@ const FlightTracker: React.FC = () => {
           ref={globeRef as any}
           isDarkMode={isDarkMode}
           initialCenter={{ lat: location?.lat ?? 51.505, lng: location?.lng ?? -0.09, height: 3_000_000 }}
+          basemap="streets"
           onViewChange={stableOnViewChange}
         />
       </div>

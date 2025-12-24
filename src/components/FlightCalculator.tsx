@@ -6,8 +6,8 @@ import { Slider } from '@mui/material';
 import planeIcon from '../plane-icon.svg';
 import { useTheme } from '../context/ThemeContext';
 import CesiumGlobe, { CesiumGlobeRef } from './common/CesiumGlobe';
-import { bearingDegrees } from '../utils/geo';
-const airportData = require('aircodes');
+import { bearingDegrees, haversineDistanceMeters } from '../utils/geo';
+import airportData from 'aircodes';
 
 interface Waypoint {
   lat: number;
@@ -127,12 +127,18 @@ const FlightCalculator: React.FC = () => {
     setLoading(true); setError('');
     try {
       const searchResponse = await fetch(`https://api.flightplandatabase.com/search/plans?fromICAO=${departure}&toICAO=${arrival}`, { headers: { Accept: 'application/json' } });
-      if (!searchResponse.ok) throw new Error('Failed to fetch flight plans');
+      if (!searchResponse.ok) {
+        const body = await searchResponse.text().catch(() => '');
+        throw new Error(`Failed to fetch flight plans: ${searchResponse.status} ${searchResponse.statusText} ${body}`);
+      }
       const plans = await searchResponse.json();
       if (plans.length === 0) { setError('No flight plans found'); setFlightPlans([]); setCachedPositions([]); return; }
       const latestPlan = plans[0];
       const planResponse = await fetch(`https://api.flightplandatabase.com/plan/${latestPlan.id}`, { headers: { Accept: 'application/json' } });
-      if (!planResponse.ok) throw new Error('Failed to fetch flight plan details');
+      if (!planResponse.ok) {
+        const body = await planResponse.text().catch(() => '');
+        throw new Error(`Failed to fetch flight plan details: ${planResponse.status} ${planResponse.statusText} ${body}`);
+      }
       const planDetails: FlightPlan = await planResponse.json();
       planDetails.route.nodes = planDetails.route.nodes || [];
       if (departureTime && arrivalTime) planDetails.duration = calculateDuration(departureTime, arrivalTime, planDetails.fromICAO, planDetails.toICAO);
@@ -144,8 +150,67 @@ const FlightCalculator: React.FC = () => {
         globeRef.current.setView({ lat: first.lat, lng: first.lon, height: 2_000_000, pitchDeg: -85 });
       }
     } catch (err) {
-      setError('Error fetching flight plans: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      const msg = err instanceof Error ? err.message : String(err);
+      // Attempt fallback: generate straight-line plan between airports if possible
+      try {
+        const fallback = generateStraightLinePlan(departure, arrival, 24);
+        setFlightPlans([fallback]);
+        calculateRoutePositions(fallback, departureTime || new Date().toISOString());
+        setError('Using fallback straight-line plan due to API error: ' + msg);
+      } catch (fallbackErr) {
+        setError('Error fetching flight plans: ' + msg);
+      }
     } finally { setLoading(false); }
+  };
+
+  const generateStraightLinePlan = (fromICAO: string, toICAO: string, points = 24): FlightPlan => {
+    const fromAirport: any = (airportData as any).getAirportByIcao(fromICAO);
+    const toAirport: any = (airportData as any).getAirportByIcao(toICAO);
+    if (!fromAirport || !toAirport) throw new Error('Airport data not available for fallback');
+    const fromLat = fromAirport.latitude_deg ?? fromAirport.lat ?? null;
+    const fromLon = fromAirport.longitude_deg ?? fromAirport.lon ?? null;
+    const toLat = toAirport.latitude_deg ?? toAirport.lat ?? null;
+    const toLon = toAirport.longitude_deg ?? toAirport.lon ?? null;
+    if (fromLat === null || fromLon === null || toLat === null || toLon === null) throw new Error('Incomplete airport coordinates');
+    // Use great-circle interpolation for more realistic routing
+    const toRad = (d: number) => d * Math.PI / 180;
+    const toDeg = (r: number) => r * 180 / Math.PI;
+    const φ1 = toRad(fromLat), λ1 = toRad(fromLon);
+    const φ2 = toRad(toLat), λ2 = toRad(toLon);
+    const Δλ = λ2 - λ1;
+    const sinφ1 = Math.sin(φ1), cosφ1 = Math.cos(φ1);
+    const sinφ2 = Math.sin(φ2), cosφ2 = Math.cos(φ2);
+    const central = Math.acos(Math.min(1, Math.max(-1, sinφ1 * sinφ2 + cosφ1 * cosφ2 * Math.cos(Δλ))));
+
+    const nodes: Waypoint[] = [];
+    if (central === 0 || !isFinite(central)) {
+      // same point
+      for (let i = 0; i <= points; i++) nodes.push({ lat: fromLat, lon: fromLon, ident: `WP${i}` });
+    } else {
+      for (let i = 0; i <= points; i++) {
+        const f = i / points;
+        const A = Math.sin((1 - f) * central) / Math.sin(central);
+        const B = Math.sin(f * central) / Math.sin(central);
+        const x = A * cosφ1 * Math.cos(λ1) + B * cosφ2 * Math.cos(λ2);
+        const y = A * cosφ1 * Math.sin(λ1) + B * cosφ2 * Math.sin(λ2);
+        const z = A * sinφ1 + B * sinφ2;
+        const φi = Math.atan2(z, Math.sqrt(x * x + y * y));
+        const λi = Math.atan2(y, x);
+        nodes.push({ lat: toDeg(φi), lon: toDeg(λi), ident: `WP${i}` });
+      }
+    }
+    const distance = haversineDistanceMeters(fromLat, fromLon, toLat, toLon);
+    const plan: FlightPlan = {
+      id: `fallback-${fromICAO}-${toICAO}-${Date.now()}`,
+      fromICAO,
+      toICAO,
+      fromName: fromAirport.name || fromICAO,
+      toName: toAirport.name || toICAO,
+      distance,
+      route: { nodes },
+      duration: undefined,
+    };
+    return plan;
   };
 
   const calculateRoutePosition = useCallback((waypoints: Waypoint[], percentage: number, depTime: string, duration: string): RouteProgress => {
@@ -224,9 +289,19 @@ const FlightCalculator: React.FC = () => {
       const bearing = bearingDegrees(start, end);
       globeRef.current.upsertMarker({ id: 'calc-plane', lat: routeProgress.position[0], lng: routeProgress.position[1], image: planeIcon, size: 24, rotationDeg: bearing });
       // Keep map north-up; center on route progress only
-      globeRef.current.setView({ lat: routeProgress.position[0], lng: routeProgress.position[1], height: 400000, pitchDeg: -85 });
+      // Preserve user zoom by omitting `height` (CesiumGlobe keeps current camera height)
+      globeRef.current.setView({ lat: routeProgress.position[0], lng: routeProgress.position[1], pitchDeg: -85 });
+      // Set globe time to the calculated route progress time so the terminator matches
+      try { globeRef.current.setTime(routeProgress.currentTime); } catch (e) { /* ignore if not supported */ }
     }
   }, [flightPlans, routeProgress]);
+
+  // When the calculator component is closed/unmounted, restore globe time to current
+  useEffect(() => {
+    return () => {
+      try { globeRef.current?.setTime(null); } catch (e) { /* ignore */ }
+    };
+  }, []);
 
   const handleSliderChange = useCallback((_: Event, value: number | number[]) => {
     const percentage = typeof value === 'number' ? value : value[0];
