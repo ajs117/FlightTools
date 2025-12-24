@@ -24,6 +24,7 @@ const ALLOWED_CROSS_ORIGIN_HOSTS = new Set([
   'b.basemaps.cartocdn.com',
   'c.basemaps.cartocdn.com',
   'd.basemaps.cartocdn.com',
+  'basemap.nationalmap.gov',
   'cdn.jsdelivr.net',
   'unpkg.com'
 ]);
@@ -51,6 +52,14 @@ async function precacheAssetsFromHtml(htmlText) {
   } catch (_) {
     // ignore
   }
+}
+
+function fetchWithTimeout(request, timeoutMs) {
+  // AbortController is supported in modern SW contexts.
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(request, { signal: controller.signal })
+    .finally(() => clearTimeout(timeoutId));
 }
 
 // Install - cache app shell and try to prefetch build manifest entries (dynamic chunks)
@@ -115,7 +124,7 @@ self.addEventListener('fetch', (event) => {
   if (isNavigation && isSameOrigin) {
     const shellUrl = scopeUrl('./index.html');
     event.respondWith(
-      fetch(event.request)
+      fetchWithTimeout(event.request, 1500)
         .then((networkResponse) => {
           if (networkResponse && networkResponse.ok) {
             // Cache the navigation response (usually index.html under the scope)
@@ -154,7 +163,7 @@ self.addEventListener('fetch', (event) => {
       caches.open(TILES_CACHE).then((cache) => {
         return cache.match(event.request).then((cachedResponse) => {
           if (cachedResponse) return cachedResponse;
-          return fetch(event.request).then((networkResponse) => {
+          return fetchWithTimeout(event.request, 3000).then((networkResponse) => {
             // store opaque responses too
             try { cache.put(event.request, networkResponse.clone()); } catch (e) { /* ignore cache failures */ }
             trimCache(TILES_CACHE, MAX_TILE_ENTRIES).catch(() => {});
