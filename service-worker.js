@@ -39,6 +39,20 @@ async function trimCache(cacheName, maxEntries) {
   }
 }
 
+async function precacheAssetsFromHtml(htmlText) {
+  try {
+    const cache = await caches.open(CACHE_NAME);
+    const matches = [...htmlText.matchAll(/\b(?:src|href)="([^"]+)"/g)].map(m => m[1]);
+    const assetUrls = matches
+      .filter(u => typeof u === 'string')
+      .filter(u => u.includes('/assets/') && (u.endsWith('.js') || u.endsWith('.css')))
+      .map(u => new URL(u, self.location.origin).toString());
+    await Promise.all(assetUrls.map(u => cache.add(u).catch(() => {})));
+  } catch (_) {
+    // ignore
+  }
+}
+
 // Install - cache app shell
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -80,6 +94,8 @@ self.addEventListener('fetch', (event) => {
           if (networkResponse && networkResponse.ok) {
             // Cache the navigation response (usually index.html under the scope)
             caches.open(CACHE_NAME).then((cache) => cache.put(event.request, networkResponse.clone()));
+            // Also cache referenced hashed assets so offline reload works after first online visit
+            networkResponse.clone().text().then(precacheAssetsFromHtml).catch(() => {});
           }
           return networkResponse;
         })
@@ -100,7 +116,7 @@ self.addEventListener('fetch', (event) => {
           }
           return networkResponse;
         }).catch(() => null);
-        return cached || networkFetch;
+        return cached || networkFetch || new Response('', { status: 504, statusText: 'Offline' });
       })
     );
     return;
